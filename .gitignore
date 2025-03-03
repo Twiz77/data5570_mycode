@@ -1,0 +1,3 @@
+myvenv/*
+bd.sqlite3
+ec2_scripts/*
