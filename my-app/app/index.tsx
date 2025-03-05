@@ -2,18 +2,18 @@ import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 
 export default function HomeScreen() {
-  const router = useRouter();
+  const router = useRouter();  // ✅ Ensure this is initialized
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Welcome to My App</Text>
 
-      {/* ✅ Add console.log to check if the button registers a click */}
       <Pressable 
         style={styles.button} 
         onPress={() => {
-          console.log("Button Clicked!"); // ✅ Step 2: Debugging
-          router.push("/counter"); // Navigation
+          console.log("Button Clicked! Router:", router);
+          console.log("Router.push function:", router.push);
+          router.push("/counter"); // ✅ Navigate to counter page
         }}
       >
         <Text style={styles.buttonText}>GO TO COUNTER</Text>
