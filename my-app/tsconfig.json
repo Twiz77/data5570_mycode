@@ -2,10 +2,10 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "baseUrl": ".",              // Make sure baseUrl is set so paths work
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"],
+      "@assets/*": ["assets/*"]  // ✅ Add this line
     }
   },
   "include": [

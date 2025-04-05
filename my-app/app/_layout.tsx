@@ -1,17 +1,14 @@
-import { Stack } from "expo-router";
+import { Slot } from "expo-router";
 import { Provider } from "react-redux";
-import { store } from "@/redux/store"; // ✅ Use absolute import
+import { store } from "@/redux/store";
 import { useFonts } from "expo-font";
-import { useEffect } from "react";
 import * as SplashScreen from "expo-splash-screen";
+import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
-import { useColorScheme } from "react-native";
-import { DarkTheme, DefaultTheme } from "@react-navigation/native"; // ✅ Keep themes for reference but don't use NavigationContainer
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
@@ -35,7 +32,7 @@ export default function RootLayout() {
 
   return (
     <Provider store={store}>
-      <Stack />  {/* ✅ Expo Router automatically handles navigation */}
+      <Slot /> {/* Renders routes like (stack)/_layout.tsx */}
       <StatusBar style="auto" />
     </Provider>
   );
