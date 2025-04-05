@@ -1,10 +1,9 @@
 # data5570_mycode
 # Chase Entwistle Data 5570
 
-# The code should all be set up properly to take customer info and upload it to the SQLite database. The button issues continue to persist as it will not open the next
-# page despite it being set up properly. If the button were to work, the project would function correctly.
+## The code should all be set up properly to take customer info and upload it to the SQLite database. The button issues continue to persist as it will not open the next page despite it being set up properly. If the button were to work, the project would function correctly.
 
-# Full Stack React Native + Django App
+## Full Stack React Native + Django App
 
 ## ✅ What This App Does
 
