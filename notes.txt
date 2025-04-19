@@ -1,16 +1,10 @@
 THINGS DONE
 --------------------------
-* Add anything that is not working or you notes that you want me to see. I will check this everytime I start to work on the 
-* Project. 
 
-* I didn't put fav color anywhere in the backend I only included the info that we have in our database
+Mock user info:
+Email: dev@example.com
+Password: (anything)
 
-BACKEND
---------------------------
-* created the virtual environment
-* can start backend by running the following command.
-* python3 manage.py runserver 0.0.0.0:8000
+email: greyson@gmail.com
+password: anything
 
-* I updated our tables so that we have the following fields
-player: Location, Name, Phone Number, Skill Level, UserID, Username
-Locations: LocationID, courts
