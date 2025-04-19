@@ -84,16 +84,14 @@ export default function Login() {
       console.log('Login successful:', result);
       
       // Set the user in Redux
-      dispatch(setUser({
+      await dispatch(setUser({
         currentUser: result,
         token: result.token || 'dev-token-123',
         isAdmin: result.isAdmin || false
       }));
       
       // Navigate to dashboard after successful login
-      setTimeout(() => {
-        router.replace('/dashboard');
-      }, 100);
+      router.replace('/dashboard');
     } catch (error) {
       console.error('Login failed:', error);
       Alert.alert(
@@ -108,39 +106,28 @@ export default function Login() {
   const handleDevLogin = async () => {
     console.log('Dev login button pressed');
     try {
-      const mockUser = {
-        id: 1,
-        first_name: 'Dev',
-        last_name: 'User',
+      setIsLoading(true);
+      const result = await dispatch(loginUser({
         email: 'dev@example.com',
-        phone: '123-456-7890',
-        rating: 3.5,
-        location: 'Seattle, WA',
-        availability: ['Weekdays', 'Weekends', 'Evenings', 'Flexible'],
-        preferredPlay: 'Both',
-        notifications: true,
-        emailNotifications: true,
-        pushNotifications: true,
-        isAdmin: true
-      };
-      const mockToken = 'dev-token-123';
-      console.log('Setting mock user:', mockUser);
-      console.log('Setting mock token:', mockToken);
+        password: 'devpassword'
+      })).unwrap();
       
-      // Set the user in Redux
-      dispatch(setUser({
-        currentUser: mockUser,
-        token: mockToken,
-        isAdmin: true
+      console.log('Dev login successful:', result);
+      
+      // Set the user in Redux with the real token
+      await dispatch(setUser({
+        currentUser: result,
+        token: result.token,
+        isAdmin: result.isAdmin
       }));
       
       // Navigate to dashboard after successful login
-      setTimeout(() => {
-        router.replace('/dashboard');
-      }, 100);
+      router.replace('/dashboard');
     } catch (error) {
       console.error('Dev login error:', error);
       setError('Failed to login with dev account');
+    } finally {
+      setIsLoading(false);
     }
   };
 

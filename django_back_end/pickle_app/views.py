@@ -9,6 +9,8 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from django.db import transaction
 from django.contrib.auth.models import User
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
 
 # List and create users (GET and POST)
 class UserListCreateAPIView(generics.ListCreateAPIView):
@@ -127,10 +129,29 @@ def register_user(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
+@permission_classes([permissions.AllowAny])
 def login_user(request):
     email = request.data.get('email')
     password = request.data.get('password')
     
+    # Special handling for dev user
+    if email == 'dev@example.com' and password == 'devpassword':
+        try:
+            user = User.objects.get(email='dev@example.com')
+            player = Player.objects.get(user=user)
+            # Create or get the auth token
+            token, _ = Token.objects.get_or_create(user=user)
+            return Response({
+                'id': user.id,
+                'email': user.email,
+                'player_id': player.id,
+                'token': token.key,
+                'isAdmin': user.is_staff
+            })
+        except (User.DoesNotExist, Player.DoesNotExist):
+            return Response({'error': 'Dev user not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Normal login flow
     try:
         user = User.objects.get(email=email)
     except User.DoesNotExist:
@@ -141,10 +162,14 @@ def login_user(request):
     
     try:
         player = Player.objects.get(user=user)
+        # Create or get the auth token
+        token, _ = Token.objects.get_or_create(user=user)
         return Response({
             'id': user.id,
             'email': user.email,
-            'player_id': player.id
+            'player_id': player.id,
+            'token': token.key,
+            'isAdmin': user.is_staff
         })
     except Player.DoesNotExist:
         return Response({'error': 'Player profile not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -187,34 +212,37 @@ def get_user_profile(request):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])  # Temporarily allow unauthenticated access for development
+@permission_classes([permissions.IsAuthenticated])
 def get_all_users(request):
     """
-    Get all users with their player profiles.
+    Get all users in the format needed by the dashboard.
+    This endpoint requires authentication.
     """
     try:
-        players = Player.objects.all()
-        user_data = []
+        # Get all players with their related data
+        players = Player.objects.select_related('user', 'location').all()
         
+        # Format the data for the dashboard
+        dashboard_data = []
         for player in players:
-            user_data.append({
+            player_data = {
                 'id': player.user.id,
                 'first_name': player.first_name,
                 'last_name': player.last_name,
-                'email': player.user.email,
-                'phone': player.phone_number,
+                'email': player.email,
+                'phone': player.phone_number,  # Note: dashboard expects 'phone' not 'phone_number'
                 'rating': float(player.skill_rating),
-                'location': player.get_location_display(),
-                'availability': player.availability,
+                'location': f"{player.location.city}, {player.location.state}" if player.location else None,
+                'availability': player.availability.split(',') if isinstance(player.availability, str) else (player.availability if isinstance(player.availability, list) else []),  # Handle both string and list
                 'preferredPlay': player.preferred_play,
                 'notifications': player.notifications_enabled,
                 'emailNotifications': player.email_notifications,
                 'pushNotifications': player.push_notifications,
-                'isAdmin': player.user.is_staff
-            })
-            
-        return Response(user_data, status=status.HTTP_200_OK)
+                'isAdmin': player.user.is_staff,
+                'created_at': player.created_at.isoformat()  # Format date for JSON
+            }
+            dashboard_data.append(player_data)
+        
+        return Response(dashboard_data, status=status.HTTP_200_OK)
     except Exception as e:
-        return Response({
-            'error': str(e)
-        }, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

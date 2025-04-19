@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-nat
 import { useRouter } from 'expo-router';
 import { Button, Card, TextInput, Divider, Provider as PaperProvider, DefaultTheme, Switch, Portal, Dialog, Checkbox } from 'react-native-paper';
 import { useSelector, useDispatch } from 'react-redux';
-import { logout } from '../redux/actions/userActions';
+import { logout, fetchUserProfile } from '@/state/userSlice';
 
 // Create a custom theme with black text color
 const theme = {
@@ -81,6 +81,36 @@ export default function Profile() {
       fetchProfile();
     }
   }, [currentUser, token, isAdmin]);
+  
+  const fetchProfile = async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching profile data...');
+      const result = await dispatch(fetchUserProfile()).unwrap();
+      console.log('Profile data fetched:', result);
+      
+      // Update profile state with the fetched data
+      if (result) {
+        setProfile({
+          first_name: result.first_name || currentUser.first_name || '',
+          last_name: result.last_name || currentUser.last_name || '',
+          email: result.email || currentUser.email || '',
+          phone: result.phone_number || currentUser.phone || '',
+          rating: result.skill_rating || currentUser.rating || 3.0,
+          location: result.location || currentUser.location || '',
+          availability: result.availability || currentUser.availability || [],
+          preferredPlay: result.preferred_play || currentUser.preferredPlay || 'Both',
+          notifications: result.notifications_enabled !== undefined ? result.notifications_enabled : (currentUser.notifications || true),
+          emailNotifications: result.email_notifications !== undefined ? result.email_notifications : (currentUser.emailNotifications || true),
+          pushNotifications: result.push_notifications !== undefined ? result.push_notifications : (currentUser.pushNotifications || true),
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   const handleInputChange = (field, value) => {
     if (field === 'rating') {

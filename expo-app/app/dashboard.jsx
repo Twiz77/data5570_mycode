@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Modal, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Modal, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Button, Card, Avatar, Divider, FAB, Provider as PaperProvider, DefaultTheme, Chip, Portal, Dialog, Checkbox, RadioButton } from 'react-native-paper';
 import { useSelector, useDispatch } from 'react-redux';
@@ -47,19 +47,30 @@ export default function Dashboard() {
     console.log('Dashboard - All Users:', allUsers);
     console.log('Dashboard - Status:', status);
 
-    if (!currentUser) {
-      console.log('No current user found, redirecting to login');
-      setTimeout(() => {
-        router.replace('/login');
-      }, 100);
-      return;
-    }
+    const checkAuth = async () => {
+      if (!currentUser || !token) {
+        console.log('No current user or token found, redirecting to login');
+        setTimeout(() => {
+          router.replace('/login');
+        }, 0);
+        return;
+      }
 
-    // Fetch users if we have a token
-    if (token) {
-      fetchUsers();
-    }
-  }, [currentUser, token, isAdmin]);
+      // Fetch users if we have a token
+      try {
+        await fetchUsers();
+      } catch (error) {
+        console.error('Error fetching users:', error);
+        if (error.message.includes('unauthorized') || error.message.includes('token')) {
+          setTimeout(() => {
+            router.replace('/login');
+          }, 0);
+        }
+      }
+    };
+
+    checkAuth();
+  }, []);
 
   // Add a new useEffect to update filtered users when allUsers changes
   useEffect(() => {
@@ -74,10 +85,18 @@ export default function Dashboard() {
     try {
       setLoading(true);
       console.log('Fetching users...');
-      await dispatch(fetchAllUsers()).unwrap();
-      console.log('Users fetched successfully');
+      const result = await dispatch(fetchAllUsers()).unwrap();
+      console.log('Users fetched successfully:', result);
+      
+      // Update filtered users with the fetched data
+      if (result && result.length > 0) {
+        setFilteredUsers(result);
+      } else {
+        console.log('No users found or empty result');
+      }
     } catch (error) {
       console.error('Error fetching users:', error);
+      Alert.alert('Error', 'Failed to load users. Please try again.');
     } finally {
       setLoading(false);
     }

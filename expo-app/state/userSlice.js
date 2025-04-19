@@ -1,7 +1,13 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 
 // Base API URL - Update with your actual IP address
-const API_URL = 'http://10.0.2.2:8000/api/';
+const API_URL = 'http://localhost:8000/api/';
+// For Android emulator, use: 'http://10.0.2.2:8000/api/'
+// For iOS simulator, use: 'http://localhost:8000/api/'
+// For physical device, use your computer's IP address: 'http://172.31.6.20:8000/api/'
+
+// Auth URL - Update with your actual IP address
+const AUTH_URL = 'http://localhost:8000/api/';
 
 // Thunks for async operations
 export const fetchUsers = createAsyncThunk('user/fetchUsers', async () => {
@@ -49,29 +55,6 @@ export const createUser = createAsyncThunk(
 export const loginUser = createAsyncThunk('user/loginUser', async (credentials) => {
   console.log('Sending login credentials to backend:', credentials);
   
-  // Special case for dev login
-  if (credentials.email === 'dev@example.com') {
-    console.log('Dev login detected, returning mock user');
-    const mockUser = {
-      id: 1,
-      first_name: 'Dev',
-      last_name: 'User',
-      email: 'dev@example.com',
-      phone: '123-456-7890',
-      rating: 3.5,
-      location: 'Seattle, WA',
-      availability: ['Weekdays', 'Weekends', 'Evenings', 'Flexible'],
-      preferredPlay: 'Both',
-      notifications: true,
-      emailNotifications: true,
-      pushNotifications: true,
-      isAdmin: true,
-      token: 'dev-token-123'
-    };
-    console.log('Mock user data:', mockUser);
-    return mockUser;
-  }
-  
   const response = await fetch(`${API_URL}auth/login/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -104,29 +87,75 @@ export const deleteUser = createAsyncThunk('user/deleteUser', async (id) => {
   return id;
 });
 
-export const fetchAllUsers = createAsyncThunk('user/fetchAllUsers', async () => {
-  console.log('Fetching all users from backend');
-  console.log('API URL:', `${API_URL}users/all/`);
-  try {
-    const response = await fetch(`${API_URL}users/all/`);
-    console.log('Response status:', response.status);
-    console.log('Response headers:', response.headers);
-    
-    const responseText = await response.text();
-    console.log('Raw response:', responseText);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch users: ${response.status} ${responseText}`);
+export const fetchAllUsers = createAsyncThunk(
+  'user/fetchAllUsers',
+  async (_, { getState, rejectWithValue }) => {
+    try {
+      const { token } = getState().user;
+      
+      if (!token) {
+        return rejectWithValue('No authentication token available');
+      }
+      
+      console.log('Fetching all users with token:', token);
+      const response = await fetch(`${API_URL}users/all/`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error fetching users:', errorData);
+        return rejectWithValue(errorData.error || 'Failed to fetch users');
+      }
+      
+      const data = await response.json();
+      console.log('Users fetched successfully:', data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      return rejectWithValue(error.message);
     }
-    
-    const data = JSON.parse(responseText);
-    console.log('Parsed users data:', data);
-    return data;
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    throw error;
   }
-});
+);
+
+export const fetchUserProfile = createAsyncThunk(
+  'user/fetchUserProfile',
+  async (_, { getState, rejectWithValue }) => {
+    try {
+      const { token } = getState().user;
+      console.log('Fetching user profile with token:', token);
+      
+      if (!token) {
+        return rejectWithValue('No authentication token available');
+      }
+      
+      const response = await fetch(`${API_URL}auth/profile/`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${token}`
+        }
+      });
+      
+      const data = await response.json();
+      console.log('Profile response:', data);
+      
+      if (!response.ok) {
+        console.error('Profile fetch error:', data);
+        return rejectWithValue(data.message || data.detail || 'Failed to fetch profile');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Profile fetch error:', error);
+      return rejectWithValue(error.message);
+    }
+  }
+);
 
 // Initial State
 const initialState = {
@@ -134,6 +163,7 @@ const initialState = {
   currentUser: null,
   token: null,
   isAdmin: false,
+  allUsers: [],
   status: 'idle', // 'idle' | 'loading' | 'succeeded' | 'failed'
   error: null,
 };
@@ -218,7 +248,25 @@ const userSlice = createSlice({
       })
       .addCase(fetchAllUsers.rejected, (state, action) => {
         state.status = 'failed';
-        state.error = action.error.message;
+        state.error = action.payload || action.error.message;
+      })
+      .addCase(fetchUserProfile.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
+      .addCase(fetchUserProfile.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        if (state.currentUser) {
+          state.currentUser = {
+            ...state.currentUser,
+            ...action.payload
+          };
+        }
+        state.error = null;
+      })
+      .addCase(fetchUserProfile.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload || action.error.message;
       });
   },
 });
