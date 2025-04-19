@@ -1,10 +1,11 @@
-import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { ScrollView, StyleSheet, Text, View, Alert } from 'react-native';
 import { useForm } from 'react-hook-form';
 import { useRouter, Link } from 'expo-router';
-import { Button, Card, Provider as PaperProvider, DefaultTheme } from 'react-native-paper';
+import { Button, Card, Provider as PaperProvider, DefaultTheme, ActivityIndicator } from 'react-native-paper';
 import { FormBuilder } from 'react-native-paper-form-builder';
 import { useDispatch } from 'react-redux';
+import { setUser, setToken } from '../redux/actions/userActions';
 import { loginUser } from '@/state/userSlice';
 
 // Create a custom theme with black text color
@@ -65,6 +66,8 @@ const styles = StyleSheet.create({
 export default function Login() {
   const router = useRouter();
   const dispatch = useDispatch();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const { control, handleSubmit, reset } = useForm({
     defaultValues: {
@@ -75,17 +78,69 @@ export default function Login() {
 
   const onSubmit = async (data) => {
     try {
-      const result = await dispatch(loginUser(data));
-      if (loginUser.fulfilled.match(result)) {
-        // Only navigate to dashboard after successful login
+      setIsLoading(true);
+      console.log('Submitting login credentials:', data);
+      const result = await dispatch(loginUser(data)).unwrap();
+      console.log('Login successful:', result);
+      
+      // Set the user in Redux
+      dispatch(setUser({
+        currentUser: result,
+        token: result.token || 'dev-token-123',
+        isAdmin: result.isAdmin || false
+      }));
+      
+      // Navigate to dashboard after successful login
+      setTimeout(() => {
         router.replace('/dashboard');
-      } else {
-        console.error('Login failed:', result.error);
-        // Handle login error (you might want to show an error message to the user)
-      }
+      }, 100);
     } catch (error) {
       console.error('Login failed:', error);
-      // Handle login error (you might want to show an error message to the user)
+      Alert.alert(
+        'Login Failed',
+        error.message || 'Invalid email or password. Please try again.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDevLogin = async () => {
+    console.log('Dev login button pressed');
+    try {
+      const mockUser = {
+        id: 1,
+        first_name: 'Dev',
+        last_name: 'User',
+        email: 'dev@example.com',
+        phone: '123-456-7890',
+        rating: 3.5,
+        location: 'Seattle, WA',
+        availability: ['Weekdays', 'Weekends', 'Evenings', 'Flexible'],
+        preferredPlay: 'Both',
+        notifications: true,
+        emailNotifications: true,
+        pushNotifications: true,
+        isAdmin: true
+      };
+      const mockToken = 'dev-token-123';
+      console.log('Setting mock user:', mockUser);
+      console.log('Setting mock token:', mockToken);
+      
+      // Set the user in Redux
+      dispatch(setUser({
+        currentUser: mockUser,
+        token: mockToken,
+        isAdmin: true
+      }));
+      
+      // Navigate to dashboard after successful login
+      setTimeout(() => {
+        router.replace('/dashboard');
+      }, 100);
+    } catch (error) {
+      console.error('Dev login error:', error);
+      setError('Failed to login with dev account');
     }
   };
 
@@ -104,81 +159,86 @@ export default function Login() {
             style={{ alignItems: 'center' }}
           />
           <Card.Content>
-            <FormBuilder
-              control={control}
-              setFocus={() => {}}
-              formConfigArray={[
-                {
-                  name: 'email',
-                  type: 'text',
-                  textInputProps: {
-                    label: 'Email',
-                    mode: 'outlined',
-                    keyboardType: 'email-address',
-                    style: { backgroundColor: 'white', color: 'black' },
-                  },
-                  rules: {
-                    required: 'Email is required',
-                    pattern: {
-                      value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-                      message: 'Invalid email address',
+            {isLoading ? (
+              <View style={{ alignItems: 'center', padding: 20 }}>
+                <ActivityIndicator size="large" color="#27c2a0" />
+                <Text style={{ marginTop: 10 }}>Logging you in...</Text>
+              </View>
+            ) : (
+              <>
+                <FormBuilder
+                  control={control}
+                  setFocus={() => {}}
+                  formConfigArray={[
+                    {
+                      name: 'email',
+                      type: 'text',
+                      textInputProps: {
+                        label: 'Email',
+                        mode: 'outlined',
+                        keyboardType: 'email-address',
+                        style: { backgroundColor: 'white', color: 'black' },
+                      },
+                      rules: {
+                        required: 'Email is required',
+                        pattern: {
+                          value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                          message: 'Invalid email address',
+                        },
+                      },
                     },
-                  },
-                },
-                {
-                  name: 'password',
-                  type: 'text',
-                  textInputProps: {
-                    label: 'Password',
-                    mode: 'outlined',
-                    secureTextEntry: true,
-                    style: { backgroundColor: 'white', color: 'black' },
-                  },
-                  rules: {
-                    required: 'Password is required',
-                  },
-                },
-              ]}
-            />
+                    {
+                      name: 'password',
+                      type: 'text',
+                      textInputProps: {
+                        label: 'Password',
+                        mode: 'outlined',
+                        secureTextEntry: true,
+                        style: { backgroundColor: 'white', color: 'black' },
+                      },
+                      rules: {
+                        required: 'Password is required',
+                      },
+                    },
+                  ]}
+                />
 
-            <Button
-              mode="contained"
-              onPress={handleSubmit(onSubmit)}
-              style={styles.submitButton}
-              labelStyle={{ color: '#fff' }}
-            >
-              Log In
-            </Button>
+                <Button
+                  mode="contained"
+                  onPress={handleSubmit(onSubmit)}
+                  style={styles.submitButton}
+                  labelStyle={{ color: '#fff' }}
+                >
+                  Log In
+                </Button>
 
-            <Button
-              mode="text"
-              onPress={() => router.replace('/')}
-              style={styles.registerButton}
-              labelStyle={{ color: '#004b87' }}
-            >
-              Don't have an account? Sign up
-            </Button>
+                <Button
+                  mode="text"
+                  onPress={() => router.replace('/')}
+                  style={styles.registerButton}
+                  labelStyle={{ color: '#004b87' }}
+                >
+                  Don't have an account? Sign up
+                </Button>
 
-            <Button
-              mode="text"
-              onPress={() => router.replace('/forgot-password')}
-              style={styles.forgotPasswordButton}
-              labelStyle={{ color: '#004b87' }}
-            >
-              Forgot Password?
-            </Button>
+                <Button
+                  mode="text"
+                  onPress={() => router.replace('/forgot-password')}
+                  style={styles.forgotPasswordButton}
+                  labelStyle={{ color: '#004b87' }}
+                >
+                  Forgot Password?
+                </Button>
 
-            <Button
-              mode="outlined"
-              onPress={() => {
-                console.log('Dev login pressed');
-                router.replace('/dashboard');
-              }}
-              style={styles.devButton}
-              labelStyle={{ color: '#666' }}
-            >
-              Skip Login (Dev Only)
-            </Button>
+                <Button
+                  mode="outlined"
+                  onPress={handleDevLogin}
+                  style={styles.devButton}
+                >
+                  Skip Login (Dev Only)
+                </Button>
+              </>
+            )}
           </Card.Content>
         </Card>
       </ScrollView>

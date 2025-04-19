@@ -55,6 +55,13 @@ export default function RootLayout() {
               headerShown: false,
             }}
           />
+          <Stack.Screen
+            name="admin"
+            options={{
+              title: "Admin",
+              headerShown: false,
+            }}
+          />
         </Stack>
       </PaperProvider>
     </Provider>

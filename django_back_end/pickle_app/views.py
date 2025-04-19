@@ -39,27 +39,33 @@ class PlayerViewSet(viewsets.ModelViewSet):
     """
     queryset = Player.objects.all()
     serializer_class = PlayerSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
+    # Temporarily allow unauthenticated access for development
+    permission_classes = [permissions.AllowAny]
     
     def get_queryset(self):
         """
         This view should return a list of all players
         for the currently authenticated user.
         """
-        return Player.objects.filter(user=self.request.user)
+        # For development, return all players
+        return Player.objects.all()
     
     def perform_create(self, serializer):
         """
         Set the user when creating a new player profile.
         """
-        serializer.save(user=self.request.user)
+        # For development, we'll skip setting the user
+        serializer.save()
     
     @action(detail=False, methods=['get'])
     def me(self, request):
         """
         Custom action to get the current user's profile.
         """
-        player = get_object_or_404(Player, user=request.user)
+        # For development, return the first player
+        player = Player.objects.first()
+        if not player:
+            return Response({"error": "No players found"}, status=status.HTTP_404_NOT_FOUND)
         serializer = self.get_serializer(player)
         return Response(serializer.data)
     
@@ -68,7 +74,10 @@ class PlayerViewSet(viewsets.ModelViewSet):
         """
         Custom action to update player preferences.
         """
-        player = get_object_or_404(Player, user=request.user)
+        # For development, update the first player
+        player = Player.objects.first()
+        if not player:
+            return Response({"error": "No players found"}, status=status.HTTP_404_NOT_FOUND)
         serializer = self.get_serializer(player, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -99,117 +108,62 @@ class LocationViewSet(viewsets.ModelViewSet):
         return queryset
 
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])
 def register_user(request):
-    """
-    Register a new user and create a player profile.
-    """
-    try:
-        with transaction.atomic():
-            # Create Django User
-            user_data = {
-                'username': request.data.get('email'),
-                'email': request.data.get('email'),
-                'password': request.data.get('password'),
-                'first_name': request.data.get('first_name'),
-                'last_name': request.data.get('last_name'),
-            }
-            
-            user = User.objects.create_user(
-                username=user_data['username'],
-                email=user_data['email'],
-                password=user_data['password'],
-                first_name=user_data['first_name'],
-                last_name=user_data['last_name']
-            )
-            
-            # Create Player profile
-            player_data = {
-                'user': user,
-                'first_name': request.data.get('first_name'),
-                'last_name': request.data.get('last_name'),
-                'email': request.data.get('email'),
-                'phone_number': request.data.get('phone_number'),
-                'skill_rating': request.data.get('rating', 3.0),
-                'availability': request.data.get('availability', []),
-                'preferred_play': request.data.get('preferredPlay', 'Both'),
-                'notifications_enabled': request.data.get('notifications', True),
-                'email_notifications': request.data.get('emailNotifications', True),
-                'push_notifications': request.data.get('pushNotifications', True),
-            }
-            
-            player = Player.objects.create(**player_data)
-            
-            # Create token for authentication
-            token, _ = Token.objects.get_or_create(user=user)
-            
-            return Response({
-                'token': token.key,
-                'user_id': user.id,
-                'player_id': player.id,
-                'message': 'User registered successfully'
-            }, status=status.HTTP_201_CREATED)
-            
-    except Exception as e:
+    serializer = UserSerializer(data=request.data)
+    if serializer.is_valid():
+        user = serializer.save()
+        # Create a player profile for the user
+        player = Player.objects.create(
+            user=user,
+            first_name=request.data.get('first_name', ''),
+            last_name=request.data.get('last_name', ''),
+            phone_number=request.data.get('phone_number', '')
+        )
         return Response({
-            'error': str(e)
-        }, status=status.HTTP_400_BAD_REQUEST)
+            'id': user.id,
+            'email': user.email,
+            'player_id': player.id
+        }, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])
 def login_user(request):
-    """
-    Login a user and return a token.
-    """
     email = request.data.get('email')
     password = request.data.get('password')
     
-    if not email or not password:
-        return Response({
-            'error': 'Please provide both email and password'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    # Find user by email
     try:
         user = User.objects.get(email=email)
     except User.DoesNotExist:
-        return Response({
-            'error': 'Invalid credentials'
-        }, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
     
-    # Authenticate user
-    user = authenticate(username=user.username, password=password)
+    if not user.check_password(password):
+        return Response({'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
     
-    if not user:
-        return Response({
-            'error': 'Invalid credentials'
-        }, status=status.HTTP_401_UNAUTHORIZED)
-    
-    # Get or create token
-    token, _ = Token.objects.get_or_create(user=user)
-    
-    # Get player profile
     try:
         player = Player.objects.get(user=user)
-        player_id = player.id
+        return Response({
+            'id': user.id,
+            'email': user.email,
+            'player_id': player.id
+        })
     except Player.DoesNotExist:
-        player_id = None
-    
-    return Response({
-        'token': token.key,
-        'user_id': user.id,
-        'player_id': player_id,
-        'message': 'Login successful'
-    })
+        return Response({'error': 'Player profile not found'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.AllowAny])  # Temporarily allow unauthenticated access
 def get_user_profile(request):
     """
     Get the profile data for the authenticated user.
+    For development, returns the first player's profile.
     """
     try:
-        player = Player.objects.get(user=request.user)
+        # For development, get the first player instead of the authenticated user
+        player = Player.objects.first()
+        if not player:
+            return Response({
+                'error': 'No player profiles found'
+            }, status=status.HTTP_404_NOT_FOUND)
+            
         return Response({
             'first_name': player.first_name,
             'last_name': player.last_name,
@@ -227,6 +181,39 @@ def get_user_profile(request):
         return Response({
             'error': 'Player profile not found'
         }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])  # Temporarily allow unauthenticated access for development
+def get_all_users(request):
+    """
+    Get all users with their player profiles.
+    """
+    try:
+        players = Player.objects.all()
+        user_data = []
+        
+        for player in players:
+            user_data.append({
+                'id': player.user.id,
+                'first_name': player.first_name,
+                'last_name': player.last_name,
+                'email': player.user.email,
+                'phone': player.phone_number,
+                'rating': float(player.skill_rating),
+                'location': player.get_location_display(),
+                'availability': player.availability,
+                'preferredPlay': player.preferred_play,
+                'notifications': player.notifications_enabled,
+                'emailNotifications': player.email_notifications,
+                'pushNotifications': player.push_notifications,
+                'isAdmin': player.user.is_staff
+            })
+            
+        return Response(user_data, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({
             'error': str(e)

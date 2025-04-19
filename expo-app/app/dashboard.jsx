@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Modal, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Button, Card, Avatar, Divider, FAB, Provider as PaperProvider, DefaultTheme, Chip, Portal, Dialog, Checkbox, RadioButton } from 'react-native-paper';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
+import { fetchAllUsers } from '@/state/userSlice';
 
 // Create a custom theme with black text color
 const theme = {
@@ -16,10 +17,9 @@ const theme = {
 
 export default function Dashboard() {
   const router = useRouter();
+  const dispatch = useDispatch();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [users, setUsers] = useState([]);
-  const [filteredUsers, setFilteredUsers] = useState([]);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   
   // Filter states
@@ -28,68 +28,71 @@ export default function Dashboard() {
   const [selectedAvailability, setSelectedAvailability] = useState([]);
   const [selectedPreferredPlay, setSelectedPreferredPlay] = useState([]);
   
-  // Get current user from Redux store
-  const currentUser = useSelector(state => state.user.currentUser);
+  // Get current user and users from Redux store
+  const { currentUser, token, isAdmin, allUsers, status } = useSelector((state) => ({
+    currentUser: state.user.currentUser,
+    token: state.user.token,
+    isAdmin: state.user.isAdmin,
+    allUsers: state.user.allUsers || [],
+    status: state.user.status
+  }));
 
-  // Simulated user data - in a real app, this would come from an API
-  const mockUsers = [
-    { id: 1, name: 'John Smith', rating: 4.0, location: 'Seattle, WA', availability: 'Weekends', preferredPlay: 'Singles', experience: '5 years' },
-    { id: 2, name: 'Sarah Johnson', rating: 3.5, location: 'Portland, OR', availability: 'Evenings', preferredPlay: 'Doubles', experience: '3 years' },
-    { id: 3, name: 'Michael Brown', rating: 2.5, location: 'Vancouver, BC', availability: 'Flexible', preferredPlay: 'Both', experience: '1 year' },
-    { id: 4, name: 'Emily Davis', rating: 4.5, location: 'San Francisco, CA', availability: 'Weekdays', preferredPlay: 'Singles', experience: '7 years' },
-    { id: 5, name: 'David Wilson', rating: 3.0, location: 'Los Angeles, CA', availability: 'Weekends', preferredPlay: 'Doubles', experience: '2 years' },
-    { id: 6, name: 'Jessica Martinez', rating: 4.0, location: 'Seattle, WA', availability: 'Weekdays', preferredPlay: 'Both', experience: '4 years' },
-    { id: 7, name: 'Robert Taylor', rating: 2.0, location: 'Portland, OR', availability: 'Weekends', preferredPlay: 'Doubles', experience: '6 months' },
-    { id: 8, name: 'Amanda Anderson', rating: 3.5, location: 'Vancouver, BC', availability: 'Evenings', preferredPlay: 'Singles', experience: '3 years' },
-    { id: 9, name: 'James Thompson', rating: 4.5, location: 'San Francisco, CA', availability: 'Flexible', preferredPlay: 'Both', experience: '6 years' },
-    { id: 10, name: 'Lisa Garcia', rating: 2.5, location: 'Los Angeles, CA', availability: 'Weekdays', preferredPlay: 'Doubles', experience: '1 year' },
-    { id: 11, name: 'Thomas Lee', rating: 3.0, location: 'Seattle, WA', availability: 'Evenings', preferredPlay: 'Singles', experience: '2 years' },
-    { id: 12, name: 'Jennifer White', rating: 4.0, location: 'Portland, OR', availability: 'Weekends', preferredPlay: 'Both', experience: '5 years' },
-    { id: 13, name: 'Christopher Moore', rating: 2.0, location: 'Vancouver, BC', availability: 'Weekdays', preferredPlay: 'Doubles', experience: '8 months' },
-    { id: 14, name: 'Michelle Clark', rating: 3.5, location: 'San Francisco, CA', availability: 'Weekends', preferredPlay: 'Singles', experience: '3 years' },
-    { id: 15, name: 'Daniel Hall', rating: 4.0, location: 'Los Angeles, CA', availability: 'Evenings', preferredPlay: 'Both', experience: '4 years' },
-    { id: 16, name: 'Patricia Young', rating: 2.5, location: 'Seattle, WA', availability: 'Flexible', preferredPlay: 'Doubles', experience: '1 year' },
-    { id: 17, name: 'Kevin King', rating: 3.0, location: 'Portland, OR', availability: 'Weekdays', preferredPlay: 'Singles', experience: '2 years' },
-    { id: 18, name: 'Nancy Wright', rating: 4.5, location: 'Vancouver, BC', availability: 'Weekends', preferredPlay: 'Both', experience: '6 years' },
-    { id: 19, name: 'Steven Lopez', rating: 2.0, location: 'San Francisco, CA', availability: 'Evenings', preferredPlay: 'Doubles', experience: '6 months' },
-    { id: 20, name: 'Betty Hill', rating: 3.5, location: 'Los Angeles, CA', availability: 'Flexible', preferredPlay: 'Singles', experience: '3 years' },
-  ];
-
-  // Extract unique values for filter options
-  const ratingOptions = [...new Set(mockUsers.map(user => user.rating))].sort((a, b) => a - b);
-  const locationOptions = [...new Set(mockUsers.map(user => user.location))];
-  const availabilityOptions = [...new Set(mockUsers.map(user => user.availability))];
-  const preferredPlayOptions = [...new Set(mockUsers.map(user => user.preferredPlay))];
+  // Filtered users based on selected filters
+  const [filteredUsers, setFilteredUsers] = useState([]);
 
   useEffect(() => {
-    // Simulate loading data from an API
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        // In a real app, this would be an API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setUsers(mockUsers);
-        setFilteredUsers(mockUsers);
-      } catch (error) {
-        console.error('Error loading users:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    console.log('Dashboard - Current User:', currentUser);
+    console.log('Dashboard - Token:', token);
+    console.log('Dashboard - Is Admin:', isAdmin);
+    console.log('Dashboard - All Users:', allUsers);
+    console.log('Dashboard - Status:', status);
 
-    loadData();
-  }, []);
+    if (!currentUser) {
+      console.log('No current user found, redirecting to login');
+      setTimeout(() => {
+        router.replace('/login');
+      }, 100);
+      return;
+    }
+
+    // Fetch users if we have a token
+    if (token) {
+      fetchUsers();
+    }
+  }, [currentUser, token, isAdmin]);
+
+  // Add a new useEffect to update filtered users when allUsers changes
+  useEffect(() => {
+    console.log('AllUsers updated:', allUsers);
+    if (allUsers && allUsers.length > 0) {
+      setFilteredUsers(allUsers);
+    }
+  }, [allUsers]);
+
+  // Fetch users from the database
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching users...');
+      await dispatch(fetchAllUsers()).unwrap();
+      console.log('Users fetched successfully');
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Extract unique values for filter options from real user data
+  const ratingOptions = [...new Set(allUsers.map(user => user.rating))].sort((a, b) => a - b);
+  const locationOptions = [...new Set(allUsers.map(user => user.location))];
+  const availabilityOptions = [...new Set(allUsers.flatMap(user => user.availability || []))];
+  const preferredPlayOptions = [...new Set(allUsers.map(user => user.preferredPlay))];
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
-    // Simulate refreshing data
-    setTimeout(() => {
-      const refreshedUsers = [...mockUsers].sort(() => Math.random() - 0.5);
-      setUsers(refreshedUsers);
-      applyFilters(refreshedUsers, selectedRatings, selectedLocations, selectedAvailability, selectedPreferredPlay);
-      setRefreshing(false);
-    }, 1500);
-  }, [selectedRatings, selectedLocations, selectedAvailability, selectedPreferredPlay]);
+    fetchUsers().finally(() => setRefreshing(false));
+  }, []);
 
   const handleLogout = () => {
     // In a real app, this would dispatch a logout action
@@ -97,7 +100,17 @@ export default function Dashboard() {
   };
 
   const handleProfilePress = () => {
-    router.push('/profile');
+    console.log('Profile button pressed');
+    console.log('Current user in dashboard:', currentUser);
+    console.log('Is admin in dashboard:', isAdmin);
+    router.replace('/profile');
+  };
+
+  const handleAdminPress = () => {
+    console.log('Admin button pressed');
+    console.log('Current user in dashboard:', currentUser);
+    console.log('Is admin in dashboard:', isAdmin);
+    router.replace('/admin');
   };
 
   const handleApiTestPress = () => {
@@ -119,7 +132,9 @@ export default function Dashboard() {
     
     // Apply availability filter
     if (availability.length > 0) {
-      filtered = filtered.filter(user => availability.includes(user.availability));
+      filtered = filtered.filter(user => 
+        user.availability && user.availability.some(a => availability.includes(a))
+      );
     }
     
     // Apply preferred play filter
@@ -135,7 +150,7 @@ export default function Dashboard() {
   };
 
   const handleApplyFilters = () => {
-    applyFilters(users, selectedRatings, selectedLocations, selectedAvailability, selectedPreferredPlay);
+    applyFilters(allUsers, selectedRatings, selectedLocations, selectedAvailability, selectedPreferredPlay);
     setFilterModalVisible(false);
   };
 
@@ -144,7 +159,7 @@ export default function Dashboard() {
     setSelectedLocations([]);
     setSelectedAvailability([]);
     setSelectedPreferredPlay([]);
-    setFilteredUsers(users);
+    setFilteredUsers(allUsers);
     setFilterModalVisible(false);
   };
 
@@ -182,7 +197,7 @@ export default function Dashboard() {
 
   // Format rating to always show decimal point
   const formatRating = (rating) => {
-    return rating.toFixed(1);
+    return rating ? rating.toFixed(1) : 'N/A';
   };
 
   return (
@@ -207,6 +222,16 @@ export default function Dashboard() {
             >
               Profile
             </Button>
+            {isAdmin && (
+              <Button 
+                mode="text" 
+                onPress={handleAdminPress}
+                icon="shield-account"
+                style={styles.headerButton}
+              >
+                Admin
+              </Button>
+            )}
             <Button 
               mode="text" 
               onPress={handleLogout}
@@ -301,22 +326,21 @@ export default function Dashboard() {
                 <Card.Content style={styles.userCardContent}>
                   <Avatar.Text 
                     size={50} 
-                    label={user.name.split(' ').map(n => n[0]).join('')} 
+                    label={user.first_name ? `${user.first_name[0]}${user.last_name?.[0] || ''}` : '??'} 
                     style={styles.avatar}
                   />
                   <View style={styles.userInfo}>
-                    <Text style={styles.userName}>{user.name}</Text>
+                    <Text style={styles.userName}>{user.first_name} {user.last_name}</Text>
                     <Text style={styles.userDetail}>Rating: {formatRating(user.rating)}</Text>
-                    <Text style={styles.userDetail}>Location: {user.location}</Text>
-                    <Text style={styles.userDetail}>Available: {user.availability}</Text>
-                    <Text style={styles.userDetail}>Preferred: {user.preferredPlay}</Text>
-                    <Text style={styles.userDetail}>Experience: {user.experience}</Text>
+                    <Text style={styles.userDetail}>Location: {user.location || 'N/A'}</Text>
+                    <Text style={styles.userDetail}>Available: {user.availability?.join(', ') || 'N/A'}</Text>
+                    <Text style={styles.userDetail}>Preferred: {user.preferredPlay || 'N/A'}</Text>
                   </View>
                 </Card.Content>
                 <Card.Actions>
                   <Button 
                     mode="contained" 
-                    onPress={() => console.log(`Connect with ${user.name}`)}
+                    onPress={() => console.log(`Connect with ${user.first_name} ${user.last_name}`)}
                     style={styles.connectButton}
                   >
                     Connect

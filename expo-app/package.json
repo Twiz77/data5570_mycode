@@ -9,14 +9,16 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "jest --watchAll",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "seed-users": "node scripts/seedUsers.js",
+    "update-users": "node scripts/updateUsers.js"
   },
   "jest": {
     "preset": "jest-expo"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.2",
-    "@react-native-picker/picker": "^2.11.0",
+    "@react-native-picker/picker": "^2.9.0",
     "@react-navigation/bottom-tabs": "^7.2.0",
     "@react-navigation/native": "^7.0.14",
     "@reduxjs/toolkit": "^2.6.0",
@@ -35,7 +37,7 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-hook-form": "^7.54.2",
-    "react-native": "0.76.7",
+    "react-native": "^0.76.9",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-paper": "^5.13.1",
     "react-native-paper-form-builder": "^2.1.2",

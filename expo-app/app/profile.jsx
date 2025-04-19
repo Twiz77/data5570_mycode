@@ -25,8 +25,11 @@ export default function Profile() {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   
   // Get current user and token from Redux store
-  const currentUser = useSelector(state => state.user.currentUser);
-  const token = useSelector(state => state.user.token);
+  const { currentUser, token, isAdmin } = useSelector((state) => ({
+    currentUser: state.user.currentUser,
+    token: state.user.token,
+    isAdmin: state.user.isAdmin
+  }));
   
   // Profile state
   const [profile, setProfile] = useState({
@@ -50,44 +53,34 @@ export default function Profile() {
   const preferredPlayOptions = ['Singles', 'Doubles', 'Both'];
   
   useEffect(() => {
-    const loadUserData = async () => {
-      if (!token) {
-        console.log('No token found, redirecting to login');
-        router.replace('/login');
-        return;
-      }
+    console.log('Profile - Current User:', currentUser);
+    console.log('Profile - Token:', token);
+    console.log('Profile - Is Admin:', isAdmin);
 
-      setLoading(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/auth/profile/`, {
-          headers: {
-            'Authorization': `Token ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-        
-        if (!response.ok) {
-          if (response.status === 401) {
-            // Token is invalid or expired
-            dispatch(logout());
-            router.replace('/login');
-            return;
-          }
-          throw new Error('Failed to fetch profile data');
-        }
-        
-        const userData = await response.json();
-        setProfile(userData);
-      } catch (error) {
-        console.error('Error loading user data:', error);
-        // You might want to show an error message to the user here
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    loadUserData();
-  }, [token]);
+    if (!currentUser) {
+      console.log('No current user found, redirecting to login');
+      setTimeout(() => {
+        router.replace('/login');
+      }, 100);
+      return;
+    }
+
+    // Initialize profile with current user data
+    setProfile({
+      name: currentUser.username || '',
+      email: currentUser.email || '',
+      skillLevel: 'Beginner',
+      preferredPlayTime: 'Evening',
+      preferredDays: ['Monday', 'Wednesday', 'Friday'],
+      location: 'Downtown',
+      profilePicture: null
+    });
+
+    // Fetch latest profile data if we have a token
+    if (token) {
+      fetchProfile();
+    }
+  }, [currentUser, token, isAdmin]);
   
   const handleInputChange = (field, value) => {
     if (field === 'rating') {

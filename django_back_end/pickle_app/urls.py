@@ -10,5 +10,6 @@ urlpatterns = [
     path('', include(router.urls)),
     path('auth/register/', views.register_user, name='register'),
     path('auth/login/', views.login_user, name='login'),
-    path('auth/profile/', views.get_user_profile, name='get_user_profile'),
+    path('auth/profile/', views.get_user_profile, name='profile'),
+    path('users/all/', views.get_all_users, name='all-users'),
 ]
