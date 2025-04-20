@@ -5,7 +5,6 @@ import { useRouter, Link } from 'expo-router';
 import { Button, Card, Provider as PaperProvider, DefaultTheme, ActivityIndicator } from 'react-native-paper';
 import { FormBuilder } from 'react-native-paper-form-builder';
 import { useDispatch } from 'react-redux';
-import { setUser, setToken } from '../redux/actions/userActions';
 import { loginUser } from '@/state/userSlice';
 
 // Create a custom theme with black text color
@@ -56,11 +55,7 @@ const styles = StyleSheet.create({
   },
   forgotPasswordButton: {
     marginTop: 10,
-  },
-  devButton: {
-    marginTop: 20,
-    borderColor: '#666',
-  },
+  }
 });
 
 export default function Login() {
@@ -83,13 +78,6 @@ export default function Login() {
       const result = await dispatch(loginUser(data)).unwrap();
       console.log('Login successful:', result);
       
-      // Set the user in Redux
-      await dispatch(setUser({
-        currentUser: result,
-        token: result.token || 'dev-token-123',
-        isAdmin: result.isAdmin || false
-      }));
-      
       // Navigate to dashboard after successful login
       router.replace('/dashboard');
     } catch (error) {
@@ -98,34 +86,6 @@ export default function Login() {
         'Login Failed',
         error.message || 'Invalid email or password. Please try again.'
       );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleDevLogin = async () => {
-    console.log('Dev login button pressed');
-    try {
-      setIsLoading(true);
-      const result = await dispatch(loginUser({
-        email: 'dev@example.com',
-        password: 'devpassword'
-      })).unwrap();
-      
-      console.log('Dev login successful:', result);
-      
-      // Set the user in Redux with the real token
-      await dispatch(setUser({
-        currentUser: result,
-        token: result.token,
-        isAdmin: result.isAdmin
-      }));
-      
-      // Navigate to dashboard after successful login
-      router.replace('/dashboard');
-    } catch (error) {
-      console.error('Dev login error:', error);
-      setError('Failed to login with dev account');
     } finally {
       setIsLoading(false);
     }
@@ -215,14 +175,6 @@ export default function Login() {
                   labelStyle={{ color: '#004b87' }}
                 >
                   Forgot Password?
-                </Button>
-
-                <Button
-                  mode="outlined"
-                  onPress={handleDevLogin}
-                  style={styles.devButton}
-                >
-                  Skip Login (Dev Only)
                 </Button>
               </>
             )}

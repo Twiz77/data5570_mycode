@@ -1,13 +1,14 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 
 // Base API URL - Update with your actual IP address
-const API_URL = 'http://localhost:8000/api/';
+export const API_URL = 'http://localhost:8000/api/';
+// For web browser, use: 'http://localhost:8000/api/'
 // For Android emulator, use: 'http://10.0.2.2:8000/api/'
 // For iOS simulator, use: 'http://localhost:8000/api/'
 // For physical device, use your computer's IP address: 'http://172.31.6.20:8000/api/'
 
 // Auth URL - Update with your actual IP address
-const AUTH_URL = 'http://localhost:8000/api/';
+export const AUTH_URL = 'http://localhost:8000/api/';
 
 // Thunks for async operations
 export const fetchUsers = createAsyncThunk('user/fetchUsers', async () => {
@@ -52,23 +53,29 @@ export const createUser = createAsyncThunk(
   }
 );
 
-export const loginUser = createAsyncThunk('user/loginUser', async (credentials) => {
-  console.log('Sending login credentials to backend:', credentials);
-  
-  const response = await fetch(`${API_URL}auth/login/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(credentials),
-  });
+export const loginUser = createAsyncThunk('user/loginUser', async (credentials, { rejectWithValue }) => {
+  try {
+    console.log('Sending login credentials to backend:', credentials);
+    
+    const response = await fetch(`${API_URL}auth/login/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credentials),
+    });
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    console.error('Login failed:', errorData);
-    throw new Error(errorData.message || 'Login failed');
+    const data = await response.json();
+    console.log('Login response:', data);
+
+    if (!response.ok) {
+      console.error('Login failed:', data);
+      return rejectWithValue(data.detail || data.message || 'Login failed');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Login error:', error);
+    return rejectWithValue(error.message || 'Network error occurred');
   }
-  const data = await response.json();
-  console.log('Login response data:', data);
-  return data;
 });
 
 export const updateUser = createAsyncThunk('user/updateUser', async ({ id, updatedData }) => {
@@ -220,13 +227,16 @@ const userSlice = createSlice({
       .addCase(loginUser.fulfilled, (state, action) => {
         state.status = 'succeeded';
         state.currentUser = action.payload;
-        state.token = action.payload.token || 'dev-token-123';
+        state.token = action.payload.token;
         state.isAdmin = action.payload.isAdmin || false;
         state.error = null;
       })
       .addCase(loginUser.rejected, (state, action) => {
         state.status = 'failed';
-        state.error = action.error.message;
+        state.error = action.payload || action.error.message;
+        state.currentUser = null;
+        state.token = null;
+        state.isAdmin = false;
       })
       .addCase(updateUser.fulfilled, (state, action) => {
         const index = state.formDataList.findIndex((user) => user.id === action.payload.id);

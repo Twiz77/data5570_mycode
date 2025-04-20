@@ -48,11 +48,7 @@ const styles = StyleSheet.create({
   button: {
     marginBottom: 15,
     borderRadius: 10,
-  },
-  devButton: {
-    marginTop: 30,
-    borderColor: '#666',
-  },
+  }
 });
 
 export default function Index() {
@@ -93,30 +89,6 @@ export default function Index() {
                 labelStyle={{ color: '#fff' }}
               >
                 Login to Existing Account
-              </Button>
-
-              <Button
-                mode="outlined"
-                onPress={() => {
-                  console.log('Dev login pressed');
-                  router.replace('/dashboard');
-                }}
-                style={styles.devButton}
-                labelStyle={{ color: '#666' }}
-              >
-                Skip Login (Dev Only)
-              </Button>
-
-              <Button
-                mode="outlined"
-                onPress={() => {
-                  console.log('Navigating to test page');
-                  router.replace('/test');
-                }}
-                style={[styles.devButton, { marginTop: 10 }]}
-                labelStyle={{ color: '#666' }}
-              >
-                Test Navigation
               </Button>
             </View>
           </Card.Content>

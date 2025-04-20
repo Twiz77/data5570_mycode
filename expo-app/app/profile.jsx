@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Button, Card, TextInput, Divider, Provider as PaperProvider, DefaultTheme, Switch, Portal, Dialog, Checkbox } from 'react-native-paper';
 import { useSelector, useDispatch } from 'react-redux';
 import { logout, fetchUserProfile } from '@/state/userSlice';
+import { API_URL } from '@/state/userSlice';
 
 // Create a custom theme with black text color
 const theme = {
@@ -15,7 +16,8 @@ const theme = {
   },
 };
 
-const API_BASE_URL = 'http://localhost:8000/api';
+// Use the API_URL from userSlice.js
+const API_BASE_URL = API_URL;
 
 export default function Profile() {
   const router = useRouter();

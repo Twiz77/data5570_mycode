@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Modal, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Button, Card, Avatar, Divider, FAB, Provider as PaperProvider, DefaultTheme, Chip, Portal, Dialog, Checkbox, RadioButton } from 'react-native-paper';
+import { Button, Card, Avatar, Divider, FAB, Provider as PaperProvider, DefaultTheme, Chip, Portal, Dialog, Checkbox, RadioButton, Snackbar } from 'react-native-paper';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchAllUsers } from '@/state/userSlice';
+import { sendFriendRequest } from '@/state/connectionSlice';
 
 // Create a custom theme with black text color
 const theme = {
@@ -39,6 +40,8 @@ export default function Dashboard() {
 
   // Filtered users based on selected filters
   const [filteredUsers, setFilteredUsers] = useState([]);
+  const [notificationVisible, setNotificationVisible] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState('');
 
   useEffect(() => {
     console.log('Dashboard - Current User:', currentUser);
@@ -125,15 +128,16 @@ export default function Dashboard() {
     router.replace('/profile');
   };
 
+  const handleConnectionsPress = () => {
+    console.log('Connections button pressed');
+    router.replace('/connections');
+  };
+
   const handleAdminPress = () => {
     console.log('Admin button pressed');
     console.log('Current user in dashboard:', currentUser);
     console.log('Is admin in dashboard:', isAdmin);
     router.replace('/admin');
-  };
-
-  const handleApiTestPress = () => {
-    router.push('/api-test');
   };
 
   const applyFilters = (usersToFilter, ratings, locations, availability, preferredPlay) => {
@@ -219,6 +223,31 @@ export default function Dashboard() {
     return rating ? rating.toFixed(1) : 'N/A';
   };
 
+  const handleConnect = async (user) => {
+    console.log('Connect button pressed for user:', user);
+    
+    try {
+      // Use the user's ID directly since that's what the backend expects
+      const userId = user.id;
+      if (!userId) {
+        console.error('No user ID found:', user);
+        Alert.alert('Error', 'Unable to send friend request: Invalid user data');
+        return;
+      }
+
+      console.log('Sending friend request to user ID:', userId);
+      const result = await dispatch(sendFriendRequest(userId)).unwrap();
+      console.log('Friend request sent successfully:', result);
+      
+      setNotificationMessage('Friend request sent successfully!');
+      setNotificationVisible(true);
+      setTimeout(() => setNotificationVisible(false), 3000);
+    } catch (error) {
+      console.error('Error sending friend request:', error);
+      Alert.alert('Error', 'Failed to send friend request. Please try again.');
+    }
+  };
+
   return (
     <PaperProvider theme={theme}>
       <View style={styles.container}>
@@ -227,19 +256,19 @@ export default function Dashboard() {
           <View style={styles.headerButtons}>
             <Button 
               mode="text" 
-              onPress={handleApiTestPress}
-              icon="api"
-              style={styles.headerButton}
-            >
-              API Test
-            </Button>
-            <Button 
-              mode="text" 
               onPress={handleProfilePress}
               icon="account"
               style={styles.headerButton}
             >
               Profile
+            </Button>
+            <Button 
+              mode="text" 
+              onPress={handleConnectionsPress}
+              icon="account-group"
+              style={styles.headerButton}
+            >
+              Connections
             </Button>
             {isAdmin && (
               <Button 
@@ -340,33 +369,36 @@ export default function Dashboard() {
               <Text style={styles.loadingText}>Loading players...</Text>
             </View>
           ) : (
-            filteredUsers.map(user => (
-              <Card key={user.id} style={styles.userCard}>
-                <Card.Content style={styles.userCardContent}>
-                  <Avatar.Text 
-                    size={50} 
-                    label={user.first_name ? `${user.first_name[0]}${user.last_name?.[0] || ''}` : '??'} 
-                    style={styles.avatar}
-                  />
-                  <View style={styles.userInfo}>
-                    <Text style={styles.userName}>{user.first_name} {user.last_name}</Text>
-                    <Text style={styles.userDetail}>Rating: {formatRating(user.rating)}</Text>
-                    <Text style={styles.userDetail}>Location: {user.location || 'N/A'}</Text>
-                    <Text style={styles.userDetail}>Available: {user.availability?.join(', ') || 'N/A'}</Text>
-                    <Text style={styles.userDetail}>Preferred: {user.preferredPlay || 'N/A'}</Text>
-                  </View>
-                </Card.Content>
-                <Card.Actions>
-                  <Button 
-                    mode="contained" 
-                    onPress={() => console.log(`Connect with ${user.first_name} ${user.last_name}`)}
-                    style={styles.connectButton}
-                  >
-                    Connect
-                  </Button>
-                </Card.Actions>
-              </Card>
-            ))
+            filteredUsers.map(user => {
+              console.log('User data:', JSON.stringify(user, null, 2));
+              return (
+                <Card key={user.id} style={styles.userCard}>
+                  <Card.Content style={styles.userCardContent}>
+                    <Avatar.Text 
+                      size={50} 
+                      label={user.first_name ? `${user.first_name[0]}${user.last_name?.[0] || ''}` : '??'} 
+                      style={styles.avatar}
+                    />
+                    <View style={styles.userInfo}>
+                      <Text style={styles.userName}>{user.first_name} {user.last_name}</Text>
+                      <Text style={styles.userDetail}>Rating: {formatRating(user.rating)}</Text>
+                      <Text style={styles.userDetail}>Location: {user.location || 'N/A'}</Text>
+                      <Text style={styles.userDetail}>Available: {Array.isArray(user.availability) ? user.availability.join(', ') : 'N/A'}</Text>
+                      <Text style={styles.userDetail}>Preferred: {user.preferredPlay || 'N/A'}</Text>
+                    </View>
+                  </Card.Content>
+                  <Card.Actions>
+                    <Button 
+                      mode="contained" 
+                      onPress={() => handleConnect(user)}
+                      style={styles.connectButton}
+                    >
+                      Connect
+                    </Button>
+                  </Card.Actions>
+                </Card>
+              );
+            })
           )}
         </ScrollView>
 
@@ -443,6 +475,18 @@ export default function Dashboard() {
             <Button onPress={handleApplyFilters}>Apply</Button>
           </Dialog.Actions>
         </Dialog>
+      </Portal>
+
+      {/* Notification Snackbar */}
+      <Portal>
+        <Snackbar
+          visible={notificationVisible}
+          onDismiss={() => setNotificationVisible(false)}
+          duration={3000}
+          style={styles.snackbar}
+        >
+          {notificationMessage}
+        </Snackbar>
       </Portal>
     </PaperProvider>
   );
@@ -580,5 +624,10 @@ const styles = StyleSheet.create({
   },
   filterScrollView: {
     maxHeight: 400,
+  },
+  snackbar: {
+    backgroundColor: '#27c2a0',
+    position: 'absolute',
+    bottom: 20,
   },
 }); 
