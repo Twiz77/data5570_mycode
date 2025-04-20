@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Alert, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Button, Card, Avatar, Divider, Provider as PaperProvider, DefaultTheme, Chip, FAB, IconButton } from 'react-native-paper';
+import { Button, Card, Avatar, Divider, Provider as PaperProvider, DefaultTheme, Chip, FAB, IconButton, Searchbar } from 'react-native-paper';
 import { useSelector, useDispatch } from 'react-redux';
+import { createSelector } from '@reduxjs/toolkit';
 import { 
   fetchConnections, 
   fetchFriendRequests, 
@@ -10,6 +11,7 @@ import {
   rejectFriendRequest, 
   removeConnection 
 } from '../state/connectionSlice';
+import { fetchAllUsers } from '@/state/userSlice';
 
 // Create a custom theme with black text color
 const theme = {
@@ -21,18 +23,41 @@ const theme = {
   },
 };
 
+// Create memoized selectors
+const selectUserState = (state) => state.user;
+const selectConnectionsState = (state) => state.connections;
+
+const selectUserData = createSelector(
+  [selectUserState],
+  (userState) => ({
+    currentUser: userState.currentUser,
+    token: userState.token,
+  })
+);
+
+const selectConnectionsData = createSelector(
+  [selectConnectionsState],
+  (connectionsState) => ({
+    loading: connectionsState.loading,
+    error: connectionsState.error,
+  })
+);
+
 export default function Connections() {
   const router = useRouter();
   const dispatch = useDispatch();
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [connections, setConnections] = useState([]);
+  const [friendRequests, setFriendRequests] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredPlayers, setFilteredPlayers] = useState([]);
+  const [showFindPlayers, setShowFindPlayers] = useState(false);
+  const [allPlayers, setAllPlayers] = useState([]);
   
-  // Get current user and connections from Redux store
-  const { currentUser, token } = useSelector((state) => ({
-    currentUser: state.user.currentUser,
-    token: state.user.token,
-  }));
-  
-  const { connections, friendRequests, loading, error } = useSelector((state) => state.connections);
+  // Use memoized selectors
+  const { currentUser, token } = useSelector(selectUserData);
+  const { loading: connectionsLoading, error } = useSelector(selectConnectionsData);
 
   useEffect(() => {
     console.log('Connections - Current User:', currentUser);
@@ -135,6 +160,43 @@ export default function Connections() {
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
+  const handleSearch = (query) => {
+    setSearchQuery(query);
+    if (!query.trim()) {
+      setFilteredPlayers(allPlayers);
+      return;
+    }
+    
+    const searchTerm = query.toLowerCase();
+    const filtered = allPlayers.filter(player => 
+      player.first_name.toLowerCase().includes(searchTerm) ||
+      player.last_name.toLowerCase().includes(searchTerm) ||
+      (player.location && player.location.toLowerCase().includes(searchTerm)) ||
+      player.rating.toString().includes(searchTerm)
+    );
+    setFilteredPlayers(filtered);
+  };
+
+  const fetchAllPlayers = async () => {
+    try {
+      setLoading(true);
+      const result = await dispatch(fetchAllUsers()).unwrap();
+      setAllPlayers(result);
+      setFilteredPlayers(result);
+    } catch (error) {
+      console.error('Error fetching players:', error);
+      Alert.alert('Error', 'Failed to fetch players. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showFindPlayers) {
+      fetchAllPlayers();
+    }
+  }, [showFindPlayers]);
+
   return (
     <PaperProvider theme={theme}>
       <View style={styles.container}>
@@ -158,161 +220,132 @@ export default function Connections() {
         <ScrollView 
           style={styles.scrollView}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#27c2a0']}
+            />
           }
         >
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#27c2a0" />
-              <Text style={styles.loadingText}>Loading connections...</Text>
-            </View>
-          ) : (
-            <>
-              {/* Friend Requests Section */}
-              {friendRequests && friendRequests.length > 0 && (
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Friend Requests</Text>
-                  {friendRequests.map(request => (
-                    <Card key={request.id} style={styles.card}>
-                      <Card.Content style={styles.cardContent}>
-                        <Avatar.Text 
-                          size={50} 
-                          label={`${request.sender_details.first_name[0]}${request.sender_details.last_name[0]}`} 
-                          style={styles.avatar}
-                        />
-                        <View style={styles.userInfo}>
-                          <Text style={styles.userName}>
-                            {request.sender_details.first_name} {request.sender_details.last_name}
-                          </Text>
-                          <Text style={styles.userDetail}>
-                            Rating: {formatRating(request.sender_details.skill_rating)}
-                          </Text>
-                          <Text style={styles.userDetail}>
-                            Location: {request.sender_details.location_display || 'Not specified'}
-                          </Text>
-                          <Text style={styles.userDetail}>
-                            Available: {Array.isArray(request.sender_details.availability) ? request.sender_details.availability.join(', ') : 'Not specified'}
-                          </Text>
-                          <Text style={styles.userDetail}>
-                            Preferred: {request.sender_details.preferred_play || 'Not specified'}
-                          </Text>
-                          <Text style={styles.requestDate}>
-                            Requested: {formatDate(request.created_at)}
-                          </Text>
-                        </View>
-                      </Card.Content>
-                      <Card.Actions style={styles.cardActions}>
-                        <Button 
-                          mode="contained" 
-                          onPress={() => handleAcceptRequest(request.id)}
-                          style={styles.acceptButton}
-                        >
-                          Accept
-                        </Button>
-                        <Button 
-                          mode="outlined" 
-                          onPress={() => handleRejectRequest(request.id)}
-                          style={styles.rejectButton}
-                        >
-                          Reject
-                        </Button>
-                      </Card.Actions>
-                    </Card>
-                  ))}
-                </View>
+          {/* Friend Requests Section */}
+          <Card style={styles.section}>
+            <Card.Title title="Friend Requests" />
+            <Card.Content>
+              {friendRequests.length > 0 ? (
+                friendRequests.map((request) => (
+                  <View key={request.id} style={styles.requestItem}>
+                    <Text style={styles.requestText}>
+                      {request.sender.first_name} {request.sender.last_name}
+                    </Text>
+                    <View style={styles.requestActions}>
+                      <Button 
+                        mode="contained" 
+                        onPress={() => handleAcceptRequest(request.id)}
+                        style={styles.acceptButton}
+                      >
+                        Accept
+                      </Button>
+                      <Button 
+                        mode="outlined" 
+                        onPress={() => handleRejectRequest(request.id)}
+                        style={styles.rejectButton}
+                      >
+                        Reject
+                      </Button>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.emptyText}>No pending friend requests</Text>
               )}
+            </Card.Content>
+          </Card>
 
-              {/* Connections Section */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Your Connections</Text>
-                {connections && connections.length > 0 ? (
-                  connections.map(connection => {
-                    // Determine which player is the other person (not the current user)
-                    const currentPlayerId = currentUser?.player_id;
-                    const otherPlayer = connection.player1_details.id === currentPlayerId 
-                      ? connection.player2_details 
-                      : connection.player1_details;
-                    
-                    return (
-                      <Card key={connection.id} style={styles.card}>
-                        <Card.Content style={styles.cardContent}>
-                          <Avatar.Text 
-                            size={50} 
-                            label={`${otherPlayer.first_name[0]}${otherPlayer.last_name[0]}`} 
-                            style={styles.avatar}
-                          />
-                          <View style={styles.userInfo}>
-                            <Text style={styles.userName}>
-                              {otherPlayer.first_name} {otherPlayer.last_name}
-                            </Text>
-                            <Text style={styles.userDetail}>
-                              Rating: {formatRating(otherPlayer.skill_rating)}
-                            </Text>
-                            <Text style={styles.userDetail}>
-                              Location: {otherPlayer.location_display || 'Not specified'}
-                            </Text>
-                            <Text style={styles.userDetail}>
-                              Phone: {otherPlayer.phone_number || 'Not provided'}
-                            </Text>
-                            <Text style={styles.userDetail}>
-                              Available: {Array.isArray(otherPlayer.availability) ? otherPlayer.availability.join(', ') : 'Not specified'}
-                            </Text>
-                            <Text style={styles.userDetail}>
-                              Preferred: {otherPlayer.preferred_play || 'Not specified'}
-                            </Text>
-                            <Text style={styles.connectedSince}>
-                              Connected since: {formatDate(connection.created_at)}
-                            </Text>
-                          </View>
-                        </Card.Content>
-                        <Card.Actions style={styles.cardActions}>
-                          {otherPlayer.phone_number && (
-                            <Button 
-                              mode="contained" 
-                              onPress={() => handleCall(otherPlayer.phone_number)}
-                              style={styles.callButton}
-                              icon="phone"
-                            >
-                              Call
-                            </Button>
-                          )}
-                          <Button 
-                            mode="contained" 
-                            onPress={() => console.log(`Message ${otherPlayer.first_name}`)}
-                            style={styles.messageButton}
-                            icon="message"
-                          >
-                            Message
-                          </Button>
-                          <Button 
-                            mode="outlined" 
-                            onPress={() => handleRemoveConnection(connection.id)}
-                            style={styles.removeButton}
-                            icon="account-remove"
-                          >
-                            Remove
-                          </Button>
-                        </Card.Actions>
-                      </Card>
-                    );
-                  })
+          {/* Existing Connections Section */}
+          <Card style={styles.section}>
+            <Card.Title title="Your Connections" />
+            <Card.Content>
+              {connections.length > 0 ? (
+                connections.map((connection) => (
+                  <View key={connection.id} style={styles.connectionItem}>
+                    <Text style={styles.connectionText}>
+                      {connection.player.first_name} {connection.player.last_name}
+                    </Text>
+                    <Text style={styles.connectionDetails}>
+                      Rating: {connection.player.rating}
+                    </Text>
+                    <Text style={styles.connectionDetails}>
+                      Location: {connection.player.location || 'Not specified'}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.emptyText}>No connections yet</Text>
+              )}
+            </Card.Content>
+          </Card>
+
+          {/* Find Players Section */}
+          <Card style={styles.section}>
+            <Card.Title 
+              title="Find Players" 
+              right={(props) => (
+                <Button 
+                  mode="text" 
+                  onPress={() => setShowFindPlayers(!showFindPlayers)}
+                  icon={showFindPlayers ? "chevron-up" : "chevron-down"}
+                >
+                  {showFindPlayers ? "Hide" : "Show"}
+                </Button>
+              )}
+            />
+            {showFindPlayers && (
+              <Card.Content>
+                <Searchbar
+                  placeholder="Search by name, location, or rating"
+                  onChangeText={handleSearch}
+                  value={searchQuery}
+                  style={styles.searchBar}
+                />
+                {loading ? (
+                  <ActivityIndicator size="large" color="#27c2a0" />
+                ) : filteredPlayers.length > 0 ? (
+                  filteredPlayers.map((player) => (
+                    <View key={player.id} style={styles.playerItem}>
+                      <View style={styles.playerInfo}>
+                        <Text style={styles.playerName}>
+                          {player.first_name} {player.last_name}
+                        </Text>
+                        <Text style={styles.playerDetails}>
+                          Rating: {player.rating}
+                        </Text>
+                        <Text style={styles.playerDetails}>
+                          Location: {player.location || 'Not specified'}
+                        </Text>
+                      </View>
+                      <Button 
+                        mode="contained" 
+                        onPress={() => handleSendFriendRequest(player.id)}
+                        style={styles.addButton}
+                      >
+                        Add Friend
+                      </Button>
+                    </View>
+                  ))
                 ) : (
-                  <Card style={styles.emptyCard}>
-                    <Card.Content>
-                      <Text style={styles.emptyText}>You don't have any connections yet.</Text>
-                      <Text style={styles.emptySubtext}>Connect with other players to start playing together!</Text>
-                    </Card.Content>
-                  </Card>
+                  <Text style={styles.emptyText}>
+                    {searchQuery ? 'No players found matching your search' : 'No players available'}
+                  </Text>
                 )}
-              </View>
-            </>
-          )}
+              </Card.Content>
+            )}
+          </Card>
         </ScrollView>
 
         <FAB
           icon="account-plus"
           style={styles.fab}
-          onPress={() => router.replace('/dashboard')}
+          onPress={() => setShowFindPlayers(true)}
           label="Find Players"
         />
       </View>
@@ -449,5 +482,70 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: '#27c2a0',
+  },
+  searchBar: {
+    marginBottom: 16,
+    backgroundColor: '#fff',
+  },
+  playerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  playerInfo: {
+    flex: 1,
+  },
+  playerName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  playerDetails: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  addButton: {
+    marginLeft: 16,
+  },
+  requestItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  requestText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  requestActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  connectionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  connectionText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  connectionDetails: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
   },
 }); 

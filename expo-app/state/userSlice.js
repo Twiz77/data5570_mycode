@@ -19,7 +19,7 @@ export const fetchUsers = createAsyncThunk('user/fetchUsers', async () => {
 
 export const createUser = createAsyncThunk(
   'users/createUser',
-  async (userData, { rejectWithValue }) => {
+  async (userData, { dispatch, rejectWithValue }) => {
     try {
       console.log('Creating user with data:', userData);
       const response = await fetch(`${API_URL}auth/register/`, {
@@ -45,7 +45,20 @@ export const createUser = createAsyncThunk(
         return rejectWithValue(data.message || data.detail || 'Registration failed');
       }
 
-      return data;
+      // After successful registration, automatically log in the user
+      console.log('Registration successful, attempting to log in...');
+      const loginResponse = await dispatch(loginUser({
+        email: userData.email,
+        password: userData.password,
+      })).unwrap();
+      
+      console.log('Login successful after registration:', loginResponse);
+
+      // Add phone number to the login response
+      return {
+        ...loginResponse,
+        phone_number: data.phone_number
+      };
     } catch (error) {
       console.error('Registration error:', error);
       return rejectWithValue(error.message);
@@ -164,6 +177,42 @@ export const fetchUserProfile = createAsyncThunk(
   }
 );
 
+export const updateUserProfile = createAsyncThunk(
+  'user/updateUserProfile',
+  async (profileData, { getState, rejectWithValue }) => {
+    try {
+      const { token } = getState().user;
+      console.log('Updating user profile with data:', profileData);
+      
+      if (!token) {
+        return rejectWithValue('No authentication token available');
+      }
+      
+      const response = await fetch(`${API_URL}auth/profile/update/`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${token}`
+        },
+        body: JSON.stringify(profileData)
+      });
+      
+      const data = await response.json();
+      console.log('Profile update response:', data);
+      
+      if (!response.ok) {
+        console.error('Profile update error:', data);
+        return rejectWithValue(data.error || data.message || 'Failed to update profile');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Profile update error:', error);
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 // Initial State
 const initialState = {
   formDataList: [],
@@ -275,6 +324,24 @@ const userSlice = createSlice({
         state.error = null;
       })
       .addCase(fetchUserProfile.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload || action.error.message;
+      })
+      .addCase(updateUserProfile.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
+      .addCase(updateUserProfile.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        if (state.currentUser) {
+          state.currentUser = {
+            ...state.currentUser,
+            ...action.payload
+          };
+        }
+        state.error = null;
+      })
+      .addCase(updateUserProfile.rejected, (state, action) => {
         state.status = 'failed';
         state.error = action.payload || action.error.message;
       });

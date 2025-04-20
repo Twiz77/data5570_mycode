@@ -243,12 +243,14 @@ def register_user(request):
             first_name=request.data.get('first_name', ''),
             last_name=request.data.get('last_name', ''),
             phone_number=request.data.get('phone_number', ''),
-            email=user.email  # Set the email field to match the user's email
+            email=user.email,  # Set the email field to match the user's email
+            skill_rating=2.0  # Set default skill rating to 2.0 for new users
         )
         return Response({
             'id': user.id,
             'email': user.email,
-            'player_id': player.id
+            'player_id': player.id,
+            'phone_number': player.phone_number  # Include phone number in response
         }, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -373,3 +375,69 @@ def get_all_users(request):
         return Response(dashboard_data, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['PUT'])
+@permission_classes([permissions.IsAuthenticated])
+def update_user_profile(request):
+    """
+    Update the profile data for the authenticated user.
+    """
+    try:
+        # Get the player profile for the authenticated user
+        player = Player.objects.get(user=request.user)
+        
+        # Update player fields
+        if 'first_name' in request.data:
+            player.first_name = request.data['first_name']
+        if 'last_name' in request.data:
+            player.last_name = request.data['last_name']
+        if 'phone' in request.data:
+            player.phone_number = request.data['phone']
+        if 'rating' in request.data:
+            player.skill_rating = request.data['rating']
+        if 'availability' in request.data:
+            player.availability = request.data['availability']
+        if 'preferredPlay' in request.data:
+            player.preferred_play = request.data['preferredPlay']
+        if 'notifications' in request.data:
+            player.notifications_enabled = request.data['notifications']
+        if 'emailNotifications' in request.data:
+            player.email_notifications = request.data['emailNotifications']
+        if 'pushNotifications' in request.data:
+            player.push_notifications = request.data['pushNotifications']
+        
+        # Save the updated player
+        player.save()
+        
+        # Also update the user fields if provided
+        if 'first_name' in request.data:
+            request.user.first_name = request.data['first_name']
+        if 'last_name' in request.data:
+            request.user.last_name = request.data['last_name']
+        if 'email' in request.data:
+            request.user.email = request.data['email']
+        
+        # Save the updated user
+        request.user.save()
+        
+        return Response({
+            'first_name': player.first_name,
+            'last_name': player.last_name,
+            'email': player.email,
+            'phone': player.phone_number,
+            'rating': float(player.skill_rating),
+            'location': player.get_location_display(),
+            'availability': player.availability,
+            'preferredPlay': player.preferred_play,
+            'notifications': player.notifications_enabled,
+            'emailNotifications': player.email_notifications,
+            'pushNotifications': player.push_notifications,
+        }, status=status.HTTP_200_OK)
+    except Player.DoesNotExist:
+        return Response({
+            'error': 'Player profile not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_400_BAD_REQUEST)

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Button, Card, TextInput, Divider, Provider as PaperProvider, DefaultTheme, Switch, Portal, Dialog, Checkbox } from 'react-native-paper';
+import { Button, Card, TextInput, Divider, Provider as PaperProvider, DefaultTheme, Switch, Portal, Dialog, Checkbox, SegmentedButtons } from 'react-native-paper';
+import { Picker } from '@react-native-picker/picker';
 import { useSelector, useDispatch } from 'react-redux';
-import { logout, fetchUserProfile } from '@/state/userSlice';
+import { logout, fetchUserProfile, updateUserProfile } from '@/state/userSlice';
 import { API_URL } from '@/state/userSlice';
 
 // Create a custom theme with black text color
@@ -70,13 +71,17 @@ export default function Profile() {
 
     // Initialize profile with current user data
     setProfile({
-      name: currentUser.username || '',
+      first_name: currentUser.first_name || '',
+      last_name: currentUser.last_name || '',
       email: currentUser.email || '',
-      skillLevel: 'Beginner',
-      preferredPlayTime: 'Evening',
-      preferredDays: ['Monday', 'Wednesday', 'Friday'],
-      location: 'Downtown',
-      profilePicture: null
+      phone: currentUser.phone || '',
+      rating: currentUser.rating || 3.0,
+      location: currentUser.location || '',
+      availability: currentUser.availability || [],
+      preferredPlay: currentUser.preferredPlay || 'Both',
+      notifications: currentUser.notifications !== undefined ? currentUser.notifications : true,
+      emailNotifications: currentUser.emailNotifications !== undefined ? currentUser.emailNotifications : true,
+      pushNotifications: currentUser.pushNotifications !== undefined ? currentUser.pushNotifications : true,
     });
 
     // Fetch latest profile data if we have a token and haven't fetched yet
@@ -118,28 +123,9 @@ export default function Profile() {
   
   const handleInputChange = (field, value) => {
     if (field === 'rating') {
-      // Ensure value is a string
-      const stringValue = String(value);
-      
-      // Remove any non-numeric characters except the decimal point
-      const numericValue = stringValue.replace(/[^0-9.]/g, '');
-      
-      // Ensure only one decimal point
-      const parts = numericValue.split('.');
-      if (parts.length > 2) {
-        value = parts[0] + '.' + parts.slice(1).join('');
-      } else {
-        value = numericValue;
-      }
-      
-      // Limit to one digit before and one digit after the decimal point
-      const [integerPart, decimalPart] = value.split('.');
-      if (integerPart && integerPart.length > 1) {
-        value = integerPart.slice(0, 1) + (decimalPart ? '.' + decimalPart : '');
-      }
-      if (decimalPart && decimalPart.length > 1) {
-        value = integerPart + '.' + decimalPart.slice(0, 1);
-      }
+      // For rating, we're now using SegmentedButtons which provides a string value
+      // We just need to parse it to a float
+      value = parseFloat(value);
     }
     
     setProfile({
@@ -162,18 +148,19 @@ export default function Profile() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // In a real app, this would be an API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      console.log('Saving profile:', profile);
       
-      // Simulate successful save
-      console.log('Profile saved:', profile);
+      // Dispatch the updateUserProfile action
+      const result = await dispatch(updateUserProfile(profile)).unwrap();
+      console.log('Profile saved successfully:', result);
       
-      // In a real app, this would dispatch an action to update the Redux store
-      // dispatch(updateUserProfile(profile));
+      // Show success message
+      Alert.alert('Success', 'Your profile has been updated successfully.');
       
       setShowSaveDialog(false);
     } catch (error) {
       console.error('Error saving profile:', error);
+      Alert.alert('Error', error.message || 'Failed to save profile. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -247,13 +234,22 @@ export default function Profile() {
             <Card style={styles.section}>
               <Card.Content>
                 <Text style={styles.sectionTitle}>Pickleball Preferences</Text>
-                <TextInput
-                  label="Skill Rating"
-                  value={profile.rating.toString()}
-                  onChangeText={(text) => handleInputChange('rating', parseFloat(text) || 0)}
-                  keyboardType="numbers-and-punctuation"
-                  style={styles.input}
-                />
+                <Text style={styles.label}>Skill Rating</Text>
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    selectedValue={profile.rating.toString()}
+                    onValueChange={(value) => handleInputChange('rating', parseFloat(value) || 0)}
+                    style={styles.picker}
+                  >
+                    <Picker.Item label="2.0" value="2.0" />
+                    <Picker.Item label="2.5" value="2.5" />
+                    <Picker.Item label="3.0" value="3.0" />
+                    <Picker.Item label="3.5" value="3.5" />
+                    <Picker.Item label="4.0" value="4.0" />
+                    <Picker.Item label="4.5" value="4.5" />
+                    <Picker.Item label="5.0" value="5.0" />
+                  </Picker>
+                </View>
                 <TextInput
                   label="Location"
                   value={profile.location}
@@ -404,5 +400,24 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 10,
     color: '#666',
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 4,
+    marginBottom: 16,
+    backgroundColor: '#fff',
+    width: 120,
+    alignSelf: 'flex-start',
+  },
+  picker: {
+    height: 50,
+    width: 120,
   },
 }); 
