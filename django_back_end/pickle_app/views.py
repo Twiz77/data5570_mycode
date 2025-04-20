@@ -3,8 +3,8 @@ from rest_framework import generics, viewsets, permissions, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
-from .models import User, Player, Location
-from .serializers import UserSerializer, PlayerSerializer, LocationSerializer
+from .models import User, Player, Location, Connection, FriendRequest
+from .serializers import UserSerializer, PlayerSerializer, LocationSerializer, ConnectionSerializer, FriendRequestSerializer
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from django.db import transaction
@@ -109,17 +109,141 @@ class LocationViewSet(viewsets.ModelViewSet):
             
         return queryset
 
+# Connection and Friend Request Views
+class ConnectionViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint for managing connections between players.
+    """
+    serializer_class = ConnectionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Return connections for the current user.
+        """
+        player = get_object_or_404(Player, user=self.request.user)
+        return Connection.objects.filter(player1=player) | Connection.objects.filter(player2=player)
+    
+    def perform_create(self, serializer):
+        """
+        Create a connection between two players.
+        """
+        player = get_object_or_404(Player, user=self.request.user)
+        other_player_id = self.request.data.get('other_player_id')
+        
+        if not other_player_id:
+            raise serializers.ValidationError({"other_player_id": "This field is required."})
+        
+        other_player = get_object_or_404(Player, id=other_player_id)
+        
+        # Check if connection already exists
+        if Connection.objects.filter(player1=player, player2=other_player).exists() or \
+           Connection.objects.filter(player1=other_player, player2=player).exists():
+            raise serializers.ValidationError({"detail": "Connection already exists."})
+        
+        # Create the connection
+        serializer.save(player1=player, player2=other_player)
+
+class FriendRequestViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint for managing friend requests.
+    """
+    serializer_class = FriendRequestSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Return friend requests for the current user.
+        """
+        player = get_object_or_404(Player, user=self.request.user)
+        return FriendRequest.objects.filter(receiver=player, status='pending')
+    
+    def perform_create(self, serializer):
+        """
+        Create a friend request.
+        """
+        player = get_object_or_404(Player, user=self.request.user)
+        receiver_id = self.request.data.get('receiver_id')
+        
+        if not receiver_id:
+            raise serializers.ValidationError({"receiver_id": "This field is required."})
+        
+        receiver = get_object_or_404(Player, id=receiver_id)
+        
+        # Check if request already exists
+        if FriendRequest.objects.filter(sender=player, receiver=receiver, status='pending').exists():
+            raise serializers.ValidationError({"detail": "Friend request already sent."})
+        
+        # Check if connection already exists
+        if Connection.objects.filter(player1=player, player2=receiver).exists() or \
+           Connection.objects.filter(player1=receiver, player2=player).exists():
+            raise serializers.ValidationError({"detail": "Connection already exists."})
+        
+        # Create the friend request
+        serializer.save(sender=player, receiver=receiver)
+    
+    @action(detail=True, methods=['post'])
+    def accept(self, request, pk=None):
+        """
+        Accept a friend request and create a connection.
+        """
+        friend_request = self.get_object()
+        player = get_object_or_404(Player, user=request.user)
+        
+        # Verify the current user is the receiver
+        if friend_request.receiver != player:
+            return Response({"detail": "Not authorized to accept this request."}, 
+                           status=status.HTTP_403_FORBIDDEN)
+        
+        # Update the friend request status
+        friend_request.status = 'accepted'
+        friend_request.save()
+        
+        # Create a connection
+        Connection.objects.create(
+            player1=friend_request.sender,
+            player2=friend_request.receiver
+        )
+        
+        return Response({"detail": "Friend request accepted and connection created."})
+    
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """
+        Reject a friend request.
+        """
+        friend_request = self.get_object()
+        player = get_object_or_404(Player, user=request.user)
+        
+        # Verify the current user is the receiver
+        if friend_request.receiver != player:
+            return Response({"detail": "Not authorized to reject this request."}, 
+                           status=status.HTTP_403_FORBIDDEN)
+        
+        # Update the friend request status
+        friend_request.status = 'rejected'
+        friend_request.save()
+        
+        return Response({"detail": "Friend request rejected."})
+
 @api_view(['POST'])
+@permission_classes([permissions.AllowAny])
 def register_user(request):
     serializer = UserSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
+        # Set first_name and last_name on the User object
+        user.first_name = request.data.get('first_name', '')
+        user.last_name = request.data.get('last_name', '')
+        user.save()
+        
         # Create a player profile for the user
         player = Player.objects.create(
             user=user,
             first_name=request.data.get('first_name', ''),
             last_name=request.data.get('last_name', ''),
-            phone_number=request.data.get('phone_number', '')
+            phone_number=request.data.get('phone_number', ''),
+            email=user.email  # Set the email field to match the user's email
         )
         return Response({
             'id': user.id,
@@ -219,8 +343,11 @@ def get_all_users(request):
     This endpoint requires authentication.
     """
     try:
-        # Get all players with their related data
-        players = Player.objects.select_related('user', 'location').all()
+        # Get the current user's player profile
+        current_player = Player.objects.filter(user=request.user).first()
+        
+        # Get all players with their related data, excluding the current user
+        players = Player.objects.select_related('user', 'location').exclude(user=request.user)
         
         # Format the data for the dashboard
         dashboard_data = []

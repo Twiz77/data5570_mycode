@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Button, Card, TextInput, Divider, Provider as PaperProvider, DefaultTheme, Switch, Portal, Dialog, Checkbox } from 'react-native-paper';
@@ -25,6 +25,7 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const profileFetched = useRef(false);
   
   // Get current user and token from Redux store
   const { currentUser, token, isAdmin } = useSelector((state) => ({
@@ -78,8 +79,9 @@ export default function Profile() {
       profilePicture: null
     });
 
-    // Fetch latest profile data if we have a token
-    if (token) {
+    // Fetch latest profile data if we have a token and haven't fetched yet
+    if (token && !profileFetched.current) {
+      profileFetched.current = true;
       fetchProfile();
     }
   }, [currentUser, token, isAdmin]);

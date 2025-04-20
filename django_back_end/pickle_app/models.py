@@ -63,3 +63,39 @@ class Player(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+class Connection(models.Model):
+    """Model to track connections between players"""
+    id = models.AutoField(primary_key=True)
+    player1 = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='connections_as_player1')
+    player2 = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='connections_as_player2')
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ('player1', 'player2')
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.player1.get_full_name()} ↔ {self.player2.get_full_name()}"
+
+class FriendRequest(models.Model):
+    """Model to track friend requests between players"""
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('rejected', 'Rejected'),
+    ]
+    
+    id = models.AutoField(primary_key=True)
+    sender = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='sent_requests')
+    receiver = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='received_requests')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ('sender', 'receiver')
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.sender.get_full_name()} → {self.receiver.get_full_name()} ({self.status})"

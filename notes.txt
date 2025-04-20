@@ -8,3 +8,133 @@ Password: (anything)
 email: greyson@gmail.com
 password: anything
 
+
+
+
+superuser
+
+email & username: dev@example.com
+passord: testpassword
+
+
+
+Pipeline Patch Notes
+
+1. Development User Setup
+Created a development user with specific credentials:
+Email: dev@example.com
+Password: devpassword
+Set as an admin and superuser
+Associated with a player profile
+2. Token Authentication Configuration
+Added proper REST_FRAMEWORK settings in django_back_end/django_back_end/settings.py:
+Apply to notes.txt
+}
+This configured Django REST Framework to use token authentication by default
+3. Login Endpoint Modifications
+Modified the login_user view in django_back_end/pickle_app/views.py to:
+Add @permission_classes([permissions.AllowAny]) to allow unauthenticated access to the login endpoint
+Add special handling for the development user:
+Apply to notes.txt
+)
+Ensure the token is created or retrieved for the user
+Return the token in the response along with user details
+4. Frontend Token Handling
+Updated the handleDevLogin function in expo-app/app/login.jsx to:
+Use the correct API URL: http://172.31.6.20:8000/api/auth/login/
+Send the development credentials
+Extract the token from the response
+Store the token in Redux state
+5. Redux State Management
+Modified the userSlice.js to:
+Remove the hardcoded mock user and token
+Make a real API call for development login
+Store the real token from the backend in the Redux store
+6. API Request Authentication
+Updated the fetchAllUsers thunk in userSlice.js to:
+Include the token in the Authorization header:
+Apply to notes.txt
+}
+Use the correct API URL for fetching users
+7. Backend Permission Handling
+Ensured the get_all_users view had the correct permission class:
+Apply to notes.txt
+.
+This ensures that only authenticated users with valid tokens can access the endpoint
+8. Data Formatting
+Fixed the availability data formatting in the get_all_users view:
+Apply to notes.txt
+list
+This ensures the frontend receives properly formatted data it can work with
+9. Testing and Verification
+Tested the login endpoint with curl to verify it returns a valid token
+Confirmed the token is being sent correctly in API requests
+Verified that protected endpoints like get_all_users work with the token
+These changes created a complete authentication flow where:
+The development user can log in with specific credentials
+A token is generated and returned to the frontend
+The frontend stores the token in Redux state
+The token is included in subsequent API requests
+The backend validates the token and returns the requested data
+This approach provides a secure way to authenticate API requests while making it easy to test with the development user.
+
+
+
+
+    Troubleshooting Steps for the Dashboard Issues
+Here's a comprehensive list of the steps we took to troubleshoot and fix the issues:
+1. Initial Problem Identification
+Identified two main issues:
+Navigation error: "Attempted to navigate before mounting the Root Layout component"
+Data handling error: "'list' object has no attribute 'split'" when processing availability data
+2. Authentication and Token Verification
+Confirmed the dev user was successfully logging in
+Verified the token was being correctly set in Redux state
+Confirmed the token was being sent in API requests
+3. Backend API Investigation
+Checked the Django server was running and accessible
+Tested the login endpoint with curl to verify it was working
+Confirmed the token was being generated correctly
+4. Frontend Navigation Fix
+Identified the issue in the dashboard component where navigation was happening too early
+Added setTimeout to defer navigation calls until after the navigation container is mounted
+Modified the checkAuth function to handle navigation more safely
+5. Root Layout Improvements
+Replaced the explicit Stack navigator with Slot to properly support file-based routing
+Added a loading state to ensure the layout is ready before rendering
+Implemented a delay to ensure the navigation container is fully mounted
+6. Data Formatting Fix
+Identified that the availability data was causing errors when the frontend tried to call .join() on it
+Modified the get_all_users view to handle both string and list types for availability
+Added type checking with isinstance() to determine how to process the data
+Ensured we always return a list format that the frontend can work with
+6. Data Formatting Fix
+Identified that the availability data was causing errors when the frontend tried to call .join() on it
+Modified the get_all_users view to handle both string and list types for availability
+Added type checking with isinstance() to determine how to process the data
+Ensured we always return a list format that the frontend can work with
+7. Testing and Verification
+Tested the login process with dev credentials
+Verified the dashboard could fetch and display all users
+Confirmed navigation between screens worked without errors
+Checked that the availability data was properly formatted and displayed
+8. Final Solution
+Combined all fixes to create a working solution:
+Proper navigation timing in the dashboard component
+Improved root layout with Slot and loading state
+Robust data handling for availability information
+This systematic approach allowed us to identify and fix both the navigation and data formatting issues, resulting in a fully functional dashboard that can display user data correctly.
+
+
+
+
+The connections tab has been made and it hardcoded in some of the freind requests. This is the connections.jsx under
+the fetchFreindRequests function. These are hardcoded just for a mock up. Here is the steps cursors has given to
+make it work with our back end:
+
+    To implement real friend request functionality, you would need to:
+    Create backend API endpoints for friend requests
+    Update these functions to make actual API calls
+    Implement friend request creation, acceptance, and rejection logic on the backend
+    Update the Redux store to handle friend request actions
+    Would you like me to help you implement any of these real backend integrations for the friend request system?

@@ -5,6 +5,8 @@ from . import views
 router = DefaultRouter()
 router.register(r'players', views.PlayerViewSet, basename='player')
 router.register(r'locations', views.LocationViewSet, basename='location')
+router.register(r'connections', views.ConnectionViewSet, basename='connection')
+router.register(r'friend-requests', views.FriendRequestViewSet, basename='friend-request')
 
 urlpatterns = [
     path('', include(router.urls)),
