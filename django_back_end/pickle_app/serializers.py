@@ -59,9 +59,31 @@ class ConnectionSerializer(serializers.ModelSerializer):
 class FriendRequestSerializer(serializers.ModelSerializer):
     sender_details = PlayerSerializer(source='sender', read_only=True)
     receiver_details = PlayerSerializer(source='receiver', read_only=True)
+    receiver_id = serializers.IntegerField(write_only=True)
     
     class Meta:
         model = FriendRequest
-        fields = ['id', 'sender', 'receiver', 'sender_details', 'receiver_details', 
+        fields = ['id', 'sender', 'receiver', 'receiver_id', 'sender_details', 'receiver_details', 
                  'status', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'sender', 'receiver']
+
+    def validate_receiver_id(self, value):
+        print(f"Validating receiver_id: {value}")
+        try:
+            receiver = Player.objects.get(id=value)
+            print(f"Found receiver: {receiver}")
+            return value
+        except Player.DoesNotExist:
+            print(f"Receiver with ID {value} not found")
+            raise serializers.ValidationError("Invalid receiver ID")
+
+    def create(self, validated_data):
+        print(f"Creating friend request with data: {validated_data}")
+        receiver_id = validated_data.pop('receiver_id')
+        try:
+            receiver = Player.objects.get(id=receiver_id)
+            validated_data['receiver'] = receiver
+            return super().create(validated_data)
+        except Exception as e:
+            print(f"Error creating friend request: {str(e)}")
+            raise serializers.ValidationError(str(e))

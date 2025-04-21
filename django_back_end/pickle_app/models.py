@@ -18,7 +18,7 @@ class Player(models.Model):
     ]
 
     # Link to Django User
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='player')
     
     # Personal Information
     first_name = models.CharField(max_length=100)

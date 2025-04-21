@@ -10,6 +10,18 @@ export const API_URL = 'http://localhost:8000/api/';
 // Auth URL - Update with your actual IP address
 export const AUTH_URL = 'http://localhost:8000/api/';
 
+// Function to get the appropriate API URL based on the environment
+export const getApiUrl = () => {
+  // Check if running in a web browser
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    return 'http://localhost:8000/api/';
+  }
+  
+  // For mobile devices, you can use platform-specific logic here
+  // This is just a placeholder - you'll need to implement the actual logic
+  return API_URL;
+};
+
 // Thunks for async operations
 export const fetchUsers = createAsyncThunk('user/fetchUsers', async () => {
   const response = await fetch(`${API_URL}users/`);

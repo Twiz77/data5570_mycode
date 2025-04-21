@@ -224,19 +224,21 @@ export default function Dashboard() {
   };
 
   const handleConnect = async (user) => {
-    console.log('Connect button pressed for user:', user);
-    
     try {
-      // Use the user's ID directly since that's what the backend expects
-      const userId = user.id;
-      if (!userId) {
-        console.error('No user ID found:', user);
+      setLoading(true);
+      
+      // Check if we have a valid user object
+      if (!user) {
+        console.error('Invalid user object:', user);
         Alert.alert('Error', 'Unable to send friend request: Invalid user data');
         return;
       }
-
-      console.log('Sending friend request to user ID:', userId);
-      const result = await dispatch(sendFriendRequest(userId)).unwrap();
+      
+      // Use the player_id instead of id
+      const playerId = user.player_id || user.id;
+      console.log('Sending friend request to player ID:', playerId);
+      
+      const result = await dispatch(sendFriendRequest(playerId)).unwrap();
       console.log('Friend request sent successfully:', result);
       
       setNotificationMessage('Friend request sent successfully!');
@@ -244,7 +246,9 @@ export default function Dashboard() {
       setTimeout(() => setNotificationVisible(false), 3000);
     } catch (error) {
       console.error('Error sending friend request:', error);
-      Alert.alert('Error', 'Failed to send friend request. Please try again.');
+      Alert.alert('Error', error.message || 'Failed to send friend request');
+    } finally {
+      setLoading(false);
     }
   };
 

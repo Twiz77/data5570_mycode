@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { API_URL } from './userSlice';
+import { API_URL, getApiUrl } from './userSlice';
 
 // Use the API_URL from userSlice.js
 // For web browser, use: 'http://localhost:8000/api/'
@@ -17,7 +17,8 @@ export const fetchConnections = createAsyncThunk(
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch(`${API_URL}connections/`, {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}connections/`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -107,11 +108,14 @@ export const fetchFriendRequests = createAsyncThunk(
   async (_, { getState, rejectWithValue }) => {
     try {
       const { token } = getState().user;
+      console.log('Fetching friend requests with token:', token);
+      
       if (!token) {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch(`${API_URL}friend-requests/`, {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}friend-requests/`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -119,12 +123,16 @@ export const fetchFriendRequests = createAsyncThunk(
         }
       });
 
+      console.log('Friend requests response status:', response.status);
+      
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('Friend requests error data:', errorData);
         throw new Error(errorData.detail || 'Failed to fetch friend requests');
       }
 
       const data = await response.json();
+      console.log('Friend requests data:', data);
       return data;
     } catch (error) {
       console.error('Error fetching friend requests:', error);
@@ -138,25 +146,57 @@ export const sendFriendRequest = createAsyncThunk(
   async (receiverId, { getState, rejectWithValue }) => {
     try {
       const { token } = getState().user;
+      console.log('Sending friend request to user:', receiverId);
+      console.log('Using token:', token ? 'Token exists' : 'No token');
+      
       if (!token) {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch(`${API_URL}friend-requests/`, {
+      // Ensure receiverId is a number
+      const numericReceiverId = parseInt(receiverId, 10);
+      if (isNaN(numericReceiverId)) {
+        throw new Error('Invalid receiver ID');
+      }
+
+      const requestBody = { receiver_id: numericReceiverId };
+      console.log('Request body:', JSON.stringify(requestBody));
+      
+      const apiUrl = getApiUrl();
+      console.log('Using API URL:', apiUrl);
+      
+      const response = await fetch(`${apiUrl}friend-requests/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Token ${token}`
         },
-        body: JSON.stringify({ receiver_id: receiverId })
+        body: JSON.stringify(requestBody)
       });
 
+      console.log('Response status:', response.status);
+      
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('Error response data:', errorData);
+        console.error('Full error response:', JSON.stringify(errorData));
+        
+        // Handle specific error cases
+        if (response.status === 400) {
+          if (errorData.detail === 'Friend request already sent.') {
+            throw new Error('You have already sent a friend request to this user');
+          } else if (errorData.detail === 'Connection already exists.') {
+            throw new Error('You are already connected with this user');
+          } else if (errorData.receiver_id) {
+            throw new Error(`Error with receiver ID: ${errorData.receiver_id}`);
+          }
+        }
+        
         throw new Error(errorData.detail || 'Failed to send friend request');
       }
 
       const data = await response.json();
+      console.log('Friend request sent successfully:', data);
       return data;
     } catch (error) {
       console.error('Error sending friend request:', error);
@@ -167,14 +207,15 @@ export const sendFriendRequest = createAsyncThunk(
 
 export const acceptFriendRequest = createAsyncThunk(
   'connections/acceptFriendRequest',
-  async (requestId, { getState, rejectWithValue }) => {
+  async (requestId, { getState, dispatch, rejectWithValue }) => {
     try {
       const { token } = getState().user;
       if (!token) {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch(`${API_URL}friend-requests/${requestId}/accept/`, {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}friend-requests/${requestId}/accept/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -187,6 +228,9 @@ export const acceptFriendRequest = createAsyncThunk(
         throw new Error(errorData.detail || 'Failed to accept friend request');
       }
 
+      // After accepting the friend request, fetch the updated connections list
+      await dispatch(fetchConnections());
+      
       return requestId;
     } catch (error) {
       console.error('Error accepting friend request:', error);
@@ -204,7 +248,8 @@ export const rejectFriendRequest = createAsyncThunk(
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch(`${API_URL}friend-requests/${requestId}/reject/`, {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}friend-requests/${requestId}/reject/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

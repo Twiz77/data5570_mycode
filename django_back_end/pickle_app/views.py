@@ -11,6 +11,9 @@ from django.db import transaction
 from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
+from django.db.models import Q
+from rest_framework.exceptions import ValidationError
+from django.db.utils import IntegrityError
 
 # List and create users (GET and POST)
 class UserListCreateAPIView(generics.ListCreateAPIView):
@@ -152,35 +155,107 @@ class FriendRequestViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        """
-        Return friend requests for the current user.
-        """
-        player = get_object_or_404(Player, user=self.request.user)
-        return FriendRequest.objects.filter(receiver=player, status='pending')
-    
+        return FriendRequest.objects.filter(
+            Q(receiver=self.request.user.player) | 
+            Q(sender=self.request.user.player)
+        ).select_related('sender', 'receiver')
+
+    def create(self, request, *args, **kwargs):
+        print(f"Creating friend request with data: {request.data}")
+        print(f"User: {request.user.id} - {request.user.username}")
+        
+        try:
+            # Check if user has a player profile
+            if not hasattr(request.user, 'player'):
+                print("User does not have a player profile")
+                return Response(
+                    {'detail': 'User does not have a player profile.'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get the receiver_id from request data
+            receiver_id = request.data.get('receiver_id')
+            print(f"Receiver ID from request: {receiver_id}")
+            
+            if not receiver_id:
+                return Response(
+                    {'receiver_id': 'This field is required.'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            try:
+                receiver = Player.objects.get(id=receiver_id)
+                print(f"Found receiver: {receiver.id} - {receiver.first_name} {receiver.last_name}")
+            except Player.DoesNotExist:
+                print(f"Player not found with ID: {receiver_id}")
+                return Response(
+                    {'receiver_id': 'Player not found.'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Check if trying to send request to self
+            if receiver.id == request.user.player.id:
+                return Response(
+                    {'detail': 'Cannot send friend request to yourself.'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Check if a friend request already exists
+            existing_request = FriendRequest.objects.filter(
+                Q(sender=request.user.player, receiver=receiver) |
+                Q(sender=receiver, receiver=request.user.player)
+            ).first()
+
+            if existing_request:
+                print(f"Existing request found: {existing_request.id} with status {existing_request.status}")
+                if existing_request.status == 'pending':
+                    return Response(
+                        {'detail': 'Friend request already sent.'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                elif existing_request.status == 'accepted':
+                    return Response(
+                        {'detail': 'Connection already exists.'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Check if they are already connected
+            if Connection.objects.filter(
+                Q(player1=request.user.player, player2=receiver) |
+                Q(player1=receiver, player2=request.user.player)
+            ).exists():
+                print("Connection already exists")
+                return Response(
+                    {'detail': 'Connection already exists.'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Create the friend request
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            
+            # Add sender to validated data
+            serializer.validated_data['sender'] = request.user.player
+            
+            print("Creating friend request with validated data:", serializer.validated_data)
+            self.perform_create(serializer)
+            
+            headers = self.get_success_headers(serializer.data)
+            return Response(
+                serializer.data, 
+                status=status.HTTP_201_CREATED, 
+                headers=headers
+            )
+            
+        except Exception as e:
+            print(f"Unexpected error: {str(e)}")
+            return Response(
+                {'detail': str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
     def perform_create(self, serializer):
-        """
-        Create a friend request.
-        """
-        player = get_object_or_404(Player, user=self.request.user)
-        receiver_id = self.request.data.get('receiver_id')
-        
-        if not receiver_id:
-            raise serializers.ValidationError({"receiver_id": "This field is required."})
-        
-        receiver = get_object_or_404(Player, id=receiver_id)
-        
-        # Check if request already exists
-        if FriendRequest.objects.filter(sender=player, receiver=receiver, status='pending').exists():
-            raise serializers.ValidationError({"detail": "Friend request already sent."})
-        
-        # Check if connection already exists
-        if Connection.objects.filter(player1=player, player2=receiver).exists() or \
-           Connection.objects.filter(player1=receiver, player2=player).exists():
-            raise serializers.ValidationError({"detail": "Connection already exists."})
-        
-        # Create the friend request
-        serializer.save(sender=player, receiver=receiver)
+        serializer.save()
     
     @action(detail=True, methods=['post'])
     def accept(self, request, pk=None):
@@ -199,13 +274,17 @@ class FriendRequestViewSet(viewsets.ModelViewSet):
         friend_request.status = 'accepted'
         friend_request.save()
         
-        # Create a connection
-        Connection.objects.create(
-            player1=friend_request.sender,
-            player2=friend_request.receiver
-        )
-        
-        return Response({"detail": "Friend request accepted and connection created."})
+        # Check if connection already exists
+        try:
+            # Create a connection
+            Connection.objects.create(
+                player1=friend_request.sender,
+                player2=friend_request.receiver
+            )
+            return Response({"detail": "Friend request accepted and connection created."})
+        except IntegrityError:
+            # If connection already exists, just return success
+            return Response({"detail": "Friend request accepted. Connection already exists."})
     
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
@@ -272,7 +351,17 @@ def login_user(request):
                 'email': user.email,
                 'player_id': player.id,
                 'token': token.key,
-                'isAdmin': user.is_staff
+                'isAdmin': user.is_staff,
+                'first_name': player.first_name,
+                'last_name': player.last_name,
+                'phone': player.phone_number,
+                'rating': float(player.skill_rating),
+                'location': player.get_location_display(),
+                'availability': player.availability,
+                'preferredPlay': player.preferred_play,
+                'notifications': player.notifications_enabled,
+                'emailNotifications': player.email_notifications,
+                'pushNotifications': player.push_notifications,
             })
         except (User.DoesNotExist, Player.DoesNotExist):
             return Response({'error': 'Dev user not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -295,7 +384,17 @@ def login_user(request):
             'email': user.email,
             'player_id': player.id,
             'token': token.key,
-            'isAdmin': user.is_staff
+            'isAdmin': user.is_staff,
+            'first_name': player.first_name,
+            'last_name': player.last_name,
+            'phone': player.phone_number,
+            'rating': float(player.skill_rating),
+            'location': player.get_location_display(),
+            'availability': player.availability,
+            'preferredPlay': player.preferred_play,
+            'notifications': player.notifications_enabled,
+            'emailNotifications': player.email_notifications,
+            'pushNotifications': player.push_notifications,
         })
     except Player.DoesNotExist:
         return Response({'error': 'Player profile not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -305,11 +404,15 @@ def login_user(request):
 def get_user_profile(request):
     """
     Get the profile data for the authenticated user.
-    For development, returns the first player's profile.
     """
     try:
-        # For development, get the first player instead of the authenticated user
-        player = Player.objects.first()
+        # Get the authenticated user's player profile
+        if request.user.is_authenticated:
+            player = Player.objects.filter(user=request.user).first()
+        else:
+            # For development, get the first player if not authenticated
+            player = Player.objects.first()
+            
         if not player:
             return Response({
                 'error': 'No player profiles found'
@@ -355,7 +458,8 @@ def get_all_users(request):
         dashboard_data = []
         for player in players:
             player_data = {
-                'id': player.user.id,
+                'id': player.user.id,  # User ID (for backward compatibility)
+                'player_id': player.id,  # Player ID (for friend requests)
                 'first_name': player.first_name,
                 'last_name': player.last_name,
                 'email': player.email,

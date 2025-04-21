@@ -9,7 +9,8 @@ import {
   fetchFriendRequests, 
   acceptFriendRequest, 
   rejectFriendRequest, 
-  removeConnection 
+  removeConnection,
+  sendFriendRequest
 } from '../state/connectionSlice';
 import { fetchAllUsers } from '@/state/userSlice';
 
@@ -74,8 +75,17 @@ export default function Connections() {
 
       // Fetch connections and friend requests
       try {
-        await dispatch(fetchConnections()).unwrap();
-        await dispatch(fetchFriendRequests()).unwrap();
+        console.log('Fetching connections and friend requests...');
+        const connectionsResult = await dispatch(fetchConnections()).unwrap();
+        console.log('Connections fetched:', connectionsResult);
+        
+        const friendRequestsResult = await dispatch(fetchFriendRequests()).unwrap();
+        console.log('Friend requests fetched:', friendRequestsResult);
+        
+        // Update local state with the fetched data
+        if (friendRequestsResult) {
+          setFriendRequests(friendRequestsResult);
+        }
       } catch (error) {
         console.error('Error fetching connections data:', error);
         if (error.includes('unauthorized') || error.includes('token')) {
@@ -112,10 +122,21 @@ export default function Connections() {
       await dispatch(acceptFriendRequest(requestId)).unwrap();
       // After accepting, fetch connections again to get the new connection
       await dispatch(fetchConnections()).unwrap();
+      // Also refresh the friend requests list
+      const updatedRequests = await dispatch(fetchFriendRequests()).unwrap();
+      // Update local state with the fetched data
+      if (updatedRequests) {
+        setFriendRequests(updatedRequests);
+      }
       Alert.alert('Success', 'Friend request accepted');
     } catch (error) {
       console.error('Error accepting friend request:', error);
-      Alert.alert('Error', 'Failed to accept friend request. Please try again.');
+      // Check if the error is due to a duplicate connection
+      if (error.includes('UNIQUE constraint failed') || error.includes('already exists')) {
+        Alert.alert('Error', 'You are already connected with this player.');
+      } else {
+        Alert.alert('Error', 'Failed to accept friend request. Please try again.');
+      }
     }
   };
 
@@ -123,6 +144,12 @@ export default function Connections() {
     try {
       console.log('Rejecting friend request:', requestId);
       await dispatch(rejectFriendRequest(requestId)).unwrap();
+      // Refresh the friend requests list after rejecting
+      const updatedRequests = await dispatch(fetchFriendRequests()).unwrap();
+      // Update local state with the fetched data
+      if (updatedRequests) {
+        setFriendRequests(updatedRequests);
+      }
       Alert.alert('Success', 'Friend request rejected');
     } catch (error) {
       console.error('Error rejecting friend request:', error);
@@ -197,6 +224,25 @@ export default function Connections() {
     }
   }, [showFindPlayers]);
 
+  const handleSendFriendRequest = async (playerId) => {
+    try {
+      if (!playerId) {
+        console.error('No player ID provided');
+        Alert.alert('Error', 'Unable to send friend request: Invalid player data');
+        return;
+      }
+
+      console.log('Sending friend request to player ID:', playerId);
+      const result = await dispatch(sendFriendRequest(playerId)).unwrap();
+      console.log('Friend request sent successfully:', result);
+      
+      Alert.alert('Success', 'Friend request sent successfully!');
+    } catch (error) {
+      console.error('Error sending friend request:', error);
+      Alert.alert('Error', error.message || 'Failed to send friend request');
+    }
+  };
+
   return (
     <PaperProvider theme={theme}>
       <View style={styles.container}>
@@ -234,9 +280,20 @@ export default function Connections() {
               {friendRequests.length > 0 ? (
                 friendRequests.map((request) => (
                   <View key={request.id} style={styles.requestItem}>
-                    <Text style={styles.requestText}>
-                      {request.sender.first_name} {request.sender.last_name}
-                    </Text>
+                    <View style={styles.requestInfo}>
+                      <Text style={styles.requestName}>
+                        {request.sender_details.first_name} {request.sender_details.last_name}
+                      </Text>
+                      <Text style={styles.requestDetails}>
+                        Rating: {request.sender_details.skill_rating || 'Not specified'}
+                      </Text>
+                      <Text style={styles.requestDetails}>
+                        Location: {request.sender_details.location_display || 'Not specified'}
+                      </Text>
+                      <Text style={styles.requestDetails}>
+                        Skill Level: {request.sender_details.skill_level || 'Not specified'}
+                      </Text>
+                    </View>
                     <View style={styles.requestActions}>
                       <Button 
                         mode="contained" 
@@ -323,12 +380,12 @@ export default function Connections() {
                           Location: {player.location || 'Not specified'}
                         </Text>
                       </View>
-                      <Button 
-                        mode="contained" 
-                        onPress={() => handleSendFriendRequest(player.id)}
-                        style={styles.addButton}
+                      <Button
+                        mode="contained"
+                        onPress={() => handleSendFriendRequest(player.player_id || player.id)}
+                        style={styles.connectButton}
                       >
-                        Add Friend
+                        Connect
                       </Button>
                     </View>
                   ))
@@ -508,26 +565,33 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 4,
   },
-  addButton: {
+  connectButton: {
     marginLeft: 16,
   },
   requestItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  requestText: {
+  requestInfo: {
     flex: 1,
+  },
+  requestName: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
   },
+  requestDetails: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
+  },
   requestActions: {
     flexDirection: 'row',
-    alignItems: 'center',
+    gap: 8,
   },
   connectionItem: {
     flexDirection: 'row',
