@@ -115,6 +115,8 @@ export const fetchFriendRequests = createAsyncThunk(
       }
 
       const apiUrl = getApiUrl();
+      console.log('Using API URL:', apiUrl);
+      
       const response = await fetch(`${apiUrl}friend-requests/`, {
         method: 'GET',
         headers: {
@@ -133,6 +135,23 @@ export const fetchFriendRequests = createAsyncThunk(
 
       const data = await response.json();
       console.log('Friend requests data:', data);
+      
+      // Log each friend request in detail
+      if (data && data.length > 0) {
+        console.log('Friend request details:');
+        data.forEach(request => {
+          console.log('Request ID:', request.id);
+          console.log('Status:', request.status);
+          console.log('Sender ID:', request.sender);
+          console.log('Receiver ID:', request.receiver);
+          console.log('Sender Details:', request.sender_details);
+          console.log('Receiver Details:', request.receiver_details);
+          console.log('---');
+        });
+      } else {
+        console.log('No friend requests found in response');
+      }
+      
       return data;
     } catch (error) {
       console.error('Error fetching friend requests:', error);
@@ -179,27 +198,24 @@ export const sendFriendRequest = createAsyncThunk(
       if (!response.ok) {
         const errorData = await response.json();
         console.error('Error response data:', errorData);
-        console.error('Full error response:', JSON.stringify(errorData));
-        
-        // Handle specific error cases
-        if (response.status === 400) {
-          if (errorData.detail === 'Friend request already sent.') {
-            throw new Error('You have already sent a friend request to this user');
-          } else if (errorData.detail === 'Connection already exists.') {
-            throw new Error('You are already connected with this user');
-          } else if (errorData.receiver_id) {
-            throw new Error(`Error with receiver ID: ${errorData.receiver_id}`);
-          }
-        }
-        
+        console.error('Full error details:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData
+        });
         throw new Error(errorData.detail || 'Failed to send friend request');
       }
 
       const data = await response.json();
-      console.log('Friend request sent successfully:', data);
+      console.log('Friend request created successfully:', data);
       return data;
     } catch (error) {
-      console.error('Error sending friend request:', error);
+      console.error('Error in sendFriendRequest:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        receiverId
+      });
       return rejectWithValue(error.message);
     }
   }

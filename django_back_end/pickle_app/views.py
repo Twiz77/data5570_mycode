@@ -155,20 +155,39 @@ class FriendRequestViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return FriendRequest.objects.filter(
+        print(f"\nGetting friend requests for user: {self.request.user.id}")
+        print(f"User's player ID: {self.request.user.player.id}")
+        
+        # Get all friend requests for this user (both sent and received)
+        all_requests = FriendRequest.objects.filter(
             Q(receiver=self.request.user.player) | 
-            Q(sender=self.request.user.player),
-            status='pending'  # Only return pending friend requests
+            Q(sender=self.request.user.player)
         ).select_related('sender', 'receiver')
+        
+        print(f"Total friend requests found: {all_requests.count()}")
+        for request in all_requests:
+            print(f"Request ID: {request.id}")
+            print(f"Status: {request.status}")
+            print(f"Sender: {request.sender.id} ({request.sender.user.username})")
+            print(f"Receiver: {request.receiver.id} ({request.receiver.user.username})")
+            print("---")
+        
+        # Filter for pending requests
+        pending_requests = all_requests.filter(status='pending')
+        print(f"Pending friend requests: {pending_requests.count()}")
+        
+        return pending_requests
 
     def create(self, request, *args, **kwargs):
-        print(f"Creating friend request with data: {request.data}")
+        print(f"\n=== Creating Friend Request ===")
+        print(f"Request data: {request.data}")
         print(f"User: {request.user.id} - {request.user.username}")
+        print(f"User's player ID: {request.user.player.id}")
         
         try:
             # Check if user has a player profile
             if not hasattr(request.user, 'player'):
-                print("User does not have a player profile")
+                print("Error: User does not have a player profile")
                 return Response(
                     {'detail': 'User does not have a player profile.'}, 
                     status=status.HTTP_400_BAD_REQUEST
@@ -179,6 +198,7 @@ class FriendRequestViewSet(viewsets.ModelViewSet):
             print(f"Receiver ID from request: {receiver_id}")
             
             if not receiver_id:
+                print("Error: receiver_id not provided")
                 return Response(
                     {'receiver_id': 'This field is required.'}, 
                     status=status.HTTP_400_BAD_REQUEST
@@ -187,8 +207,9 @@ class FriendRequestViewSet(viewsets.ModelViewSet):
             try:
                 receiver = Player.objects.get(id=receiver_id)
                 print(f"Found receiver: {receiver.id} - {receiver.first_name} {receiver.last_name}")
+                print(f"Receiver's user ID: {receiver.user.id}")
             except Player.DoesNotExist:
-                print(f"Player not found with ID: {receiver_id}")
+                print(f"Error: Player not found with ID: {receiver_id}")
                 return Response(
                     {'receiver_id': 'Player not found.'}, 
                     status=status.HTTP_400_BAD_REQUEST
@@ -196,6 +217,7 @@ class FriendRequestViewSet(viewsets.ModelViewSet):
 
             # Check if trying to send request to self
             if receiver.id == request.user.player.id:
+                print("Error: Attempting to send friend request to self")
                 return Response(
                     {'detail': 'Cannot send friend request to yourself.'}, 
                     status=status.HTTP_400_BAD_REQUEST
@@ -208,7 +230,11 @@ class FriendRequestViewSet(viewsets.ModelViewSet):
             ).first()
 
             if existing_request:
-                print(f"Existing request found: {existing_request.id} with status {existing_request.status}")
+                print(f"Found existing request: {existing_request.id}")
+                print(f"Status: {existing_request.status}")
+                print(f"Sender: {existing_request.sender.id} - {existing_request.sender.first_name}")
+                print(f"Receiver: {existing_request.receiver.id} - {existing_request.receiver.first_name}")
+                
                 if existing_request.status == 'pending':
                     return Response(
                         {'detail': 'Friend request already sent.'}, 
@@ -221,25 +247,30 @@ class FriendRequestViewSet(viewsets.ModelViewSet):
                     )
 
             # Check if they are already connected
-            if Connection.objects.filter(
+            existing_connection = Connection.objects.filter(
                 Q(player1=request.user.player, player2=receiver) |
                 Q(player1=receiver, player2=request.user.player)
-            ).exists():
-                print("Connection already exists")
+            ).exists()
+            
+            if existing_connection:
+                print("Error: Connection already exists")
                 return Response(
                     {'detail': 'Connection already exists.'}, 
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
             # Create the friend request
+            print("\nValidating request data...")
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             
             # Add sender to validated data
             serializer.validated_data['sender'] = request.user.player
+            print("Validated data:", serializer.validated_data)
             
-            print("Creating friend request with validated data:", serializer.validated_data)
+            print("\nCreating friend request...")
             self.perform_create(serializer)
+            print("Friend request created successfully")
             
             headers = self.get_success_headers(serializer.data)
             return Response(
@@ -249,7 +280,10 @@ class FriendRequestViewSet(viewsets.ModelViewSet):
             )
             
         except Exception as e:
-            print(f"Unexpected error: {str(e)}")
+            print(f"Unexpected error in create: {str(e)}")
+            print(f"Error type: {type(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
             return Response(
                 {'detail': str(e)}, 
                 status=status.HTTP_400_BAD_REQUEST

@@ -81,8 +81,24 @@ export default function Connections() {
         console.log('Connections fetched:', connectionsResult);
         setConnections(connectionsResult);
         
+        console.log('Fetching friend requests...');
         const friendRequestsResult = await dispatch(fetchFriendRequests()).unwrap();
         console.log('Friend requests fetched:', friendRequestsResult);
+        console.log('Friend requests count:', friendRequestsResult?.length || 0);
+        
+        // Log each friend request
+        if (friendRequestsResult && friendRequestsResult.length > 0) {
+          console.log('Friend request details:');
+          friendRequestsResult.forEach(request => {
+            console.log('Request ID:', request.id);
+            console.log('Status:', request.status);
+            console.log('Sender:', request.sender_details);
+            console.log('Receiver:', request.receiver_details);
+            console.log('---');
+          });
+        } else {
+          console.log('No friend requests found');
+        }
         
         // Update local state with the fetched data
         if (friendRequestsResult) {
@@ -90,6 +106,10 @@ export default function Connections() {
         }
       } catch (error) {
         console.error('Error fetching connections data:', error);
+        console.error('Error details:', {
+          message: error.message,
+          stack: error.stack
+        });
         if (error.includes('unauthorized') || error.includes('token')) {
           setTimeout(() => {
             router.replace('/login');
@@ -333,7 +353,6 @@ export default function Connections() {
             <Card.Content>
               {friendRequests.length > 0 ? (
                 friendRequests
-                  .filter(request => request.sender.id !== request.receiver.id) // Filter out self-friend requests
                   .map((request) => (
                   <View key={request.id} style={styles.requestItem}>
                     <View style={styles.requestInfo}>
