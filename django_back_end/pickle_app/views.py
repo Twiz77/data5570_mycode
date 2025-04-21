@@ -157,7 +157,8 @@ class FriendRequestViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return FriendRequest.objects.filter(
             Q(receiver=self.request.user.player) | 
-            Q(sender=self.request.user.player)
+            Q(sender=self.request.user.player),
+            status='pending'  # Only return pending friend requests
         ).select_related('sender', 'receiver')
 
     def create(self, request, *args, **kwargs):
@@ -259,32 +260,65 @@ class FriendRequestViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def accept(self, request, pk=None):
-        """
-        Accept a friend request and create a connection.
-        """
-        friend_request = self.get_object()
-        player = get_object_or_404(Player, user=request.user)
-        
-        # Verify the current user is the receiver
-        if friend_request.receiver != player:
-            return Response({"detail": "Not authorized to accept this request."}, 
-                           status=status.HTTP_403_FORBIDDEN)
-        
-        # Update the friend request status
-        friend_request.status = 'accepted'
-        friend_request.save()
-        
-        # Check if connection already exists
+        print(f"Accepting friend request {pk} for user {request.user.id}")
         try:
-            # Create a connection
-            Connection.objects.create(
-                player1=friend_request.sender,
-                player2=friend_request.receiver
+            friend_request = self.get_object()
+            print(f"Found friend request: {friend_request.id} from {friend_request.sender.id} to {friend_request.receiver.id}")
+            
+            # Verify the current user is the receiver
+            if friend_request.receiver.user != request.user:
+                print(f"User {request.user.id} is not the receiver {friend_request.receiver.user.id}")
+                return Response(
+                    {"detail": "You are not authorized to accept this friend request."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Check if a connection already exists
+            existing_connection = Connection.objects.filter(
+                Q(player1=friend_request.sender, player2=friend_request.receiver) |
+                Q(player1=friend_request.receiver, player2=friend_request.sender)
+            ).first()
+            
+            if existing_connection:
+                print(f"Connection already exists between {friend_request.sender.id} and {friend_request.receiver.id}")
+                return Response(
+                    {"detail": "A connection already exists between these players."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Update the friend request status
+            friend_request.status = 'accepted'
+            friend_request.save()
+            print(f"Updated friend request {friend_request.id} status to accepted")
+            
+            # Create a new connection
+            try:
+                connection = Connection.objects.create(
+                    player1=friend_request.sender,
+                    player2=friend_request.receiver
+                )
+                print(f"Created new connection {connection.id} between {friend_request.sender.id} and {friend_request.receiver.id}")
+            except IntegrityError as e:
+                print(f"IntegrityError creating connection: {str(e)}")
+                return Response(
+                    {"detail": "A connection already exists between these players."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            return Response({"detail": "Friend request accepted successfully."})
+            
+        except FriendRequest.DoesNotExist:
+            print(f"Friend request {pk} not found")
+            return Response(
+                {"detail": "Friend request not found."},
+                status=status.HTTP_404_NOT_FOUND
             )
-            return Response({"detail": "Friend request accepted and connection created."})
-        except IntegrityError:
-            # If connection already exists, just return success
-            return Response({"detail": "Friend request accepted. Connection already exists."})
+        except Exception as e:
+            print(f"Unexpected error accepting friend request: {str(e)}")
+            return Response(
+                {"detail": "An error occurred while accepting the friend request."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):

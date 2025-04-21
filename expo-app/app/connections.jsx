@@ -55,6 +55,7 @@ export default function Connections() {
   const [filteredPlayers, setFilteredPlayers] = useState([]);
   const [showFindPlayers, setShowFindPlayers] = useState(false);
   const [allPlayers, setAllPlayers] = useState([]);
+  const [isRemovingConnection, setIsRemovingConnection] = useState(false);
   
   // Use memoized selectors
   const { currentUser, token } = useSelector(selectUserData);
@@ -78,6 +79,7 @@ export default function Connections() {
         console.log('Fetching connections and friend requests...');
         const connectionsResult = await dispatch(fetchConnections()).unwrap();
         console.log('Connections fetched:', connectionsResult);
+        setConnections(connectionsResult);
         
         const friendRequestsResult = await dispatch(fetchFriendRequests()).unwrap();
         console.log('Friend requests fetched:', friendRequestsResult);
@@ -105,6 +107,12 @@ export default function Connections() {
       dispatch(fetchConnections()).unwrap(),
       dispatch(fetchFriendRequests()).unwrap()
     ])
+      .then(([connectionsResult, friendRequestsResult]) => {
+        setConnections(connectionsResult);
+        if (friendRequestsResult) {
+          setFriendRequests(friendRequestsResult);
+        }
+      })
       .catch(error => {
         console.error('Error refreshing data:', error);
         Alert.alert('Error', 'Failed to refresh data. Please try again.');
@@ -119,23 +127,40 @@ export default function Connections() {
   const handleAcceptRequest = async (requestId) => {
     try {
       console.log('Accepting friend request:', requestId);
+      console.log('Current friend requests:', friendRequests);
+      
       await dispatch(acceptFriendRequest(requestId)).unwrap();
-      // After accepting, fetch connections again to get the new connection
-      await dispatch(fetchConnections()).unwrap();
-      // Also refresh the friend requests list
-      const updatedRequests = await dispatch(fetchFriendRequests()).unwrap();
-      // Update local state with the fetched data
-      if (updatedRequests) {
-        setFriendRequests(updatedRequests);
+      
+      console.log('Friend request accepted successfully');
+      
+      // Refresh connections and friend requests
+      const [connectionsResult, friendRequestsResult] = await Promise.all([
+        dispatch(fetchConnections()).unwrap(),
+        dispatch(fetchFriendRequests()).unwrap()
+      ]);
+      
+      setConnections(connectionsResult);
+      if (friendRequestsResult) {
+        setFriendRequests(friendRequestsResult);
       }
+      
+      console.log('Updated connections:', connectionsResult);
+      console.log('Updated friend requests:', friendRequestsResult);
+      
       Alert.alert('Success', 'Friend request accepted');
     } catch (error) {
       console.error('Error accepting friend request:', error);
-      // Check if the error is due to a duplicate connection
-      if (error.includes('UNIQUE constraint failed') || error.includes('already exists')) {
-        Alert.alert('Error', 'You are already connected with this player.');
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        requestId
+      });
+      
+      // Check for specific error types
+      if (error.message && error.message.includes('already connected')) {
+        Alert.alert('Error', 'You are already connected with this user');
       } else {
-        Alert.alert('Error', 'Failed to accept friend request. Please try again.');
+        Alert.alert('Error', 'Failed to accept friend request');
       }
     }
   };
@@ -160,11 +185,40 @@ export default function Connections() {
   const handleRemoveConnection = async (connectionId) => {
     try {
       console.log('Removing connection:', connectionId);
-      await dispatch(removeConnection(connectionId)).unwrap();
-      Alert.alert('Success', 'Connection removed');
+      
+      // Show confirmation dialog
+      Alert.alert(
+        'Remove Connection',
+        'Are you sure you want to remove this connection?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: async () => {
+              setIsRemovingConnection(true);
+              try {
+                // Use the removeConnection thunk
+                await dispatch(removeConnection(connectionId)).unwrap();
+                
+                // Refresh connections list
+                await dispatch(fetchConnections()).unwrap();
+                
+                Alert.alert('Success', 'Connection removed');
+              } finally {
+                setIsRemovingConnection(false);
+              }
+            }
+          }
+        ]
+      );
     } catch (error) {
       console.error('Error removing connection:', error);
-      Alert.alert('Error', 'Failed to remove connection. Please try again.');
+      Alert.alert('Error', 'Failed to remove connection');
+      setIsRemovingConnection(false);
     }
   };
 
@@ -278,7 +332,9 @@ export default function Connections() {
             <Card.Title title="Friend Requests" />
             <Card.Content>
               {friendRequests.length > 0 ? (
-                friendRequests.map((request) => (
+                friendRequests
+                  .filter(request => request.sender.id !== request.receiver.id) // Filter out self-friend requests
+                  .map((request) => (
                   <View key={request.id} style={styles.requestItem}>
                     <View style={styles.requestInfo}>
                       <Text style={styles.requestName}>
@@ -323,19 +379,51 @@ export default function Connections() {
             <Card.Title title="Your Connections" />
             <Card.Content>
               {connections.length > 0 ? (
-                connections.map((connection) => (
-                  <View key={connection.id} style={styles.connectionItem}>
-                    <Text style={styles.connectionText}>
-                      {connection.player.first_name} {connection.player.last_name}
-                    </Text>
-                    <Text style={styles.connectionDetails}>
-                      Rating: {connection.player.rating}
-                    </Text>
-                    <Text style={styles.connectionDetails}>
-                      Location: {connection.player.location || 'Not specified'}
-                    </Text>
-                  </View>
-                ))
+                connections.map((connection) => {
+                  // Determine which player is the current user and which is the other player
+                  const currentPlayerId = currentUser?.player_id;
+                  const isCurrentUserPlayer1 = connection.player1 === currentPlayerId;
+                  const connectedPlayer = isCurrentUserPlayer1 ? connection.player2_details : connection.player1_details;
+                  
+                  return (
+                    <View key={connection.id} style={styles.connectionItem}>
+                      <View style={styles.connectionInfo}>
+                        <Text style={styles.connectionName}>
+                          {connectedPlayer.first_name} {connectedPlayer.last_name}
+                        </Text>
+                        <View style={styles.connectionDetailsContainer}>
+                          <View style={styles.connectionDetail}>
+                            <Text style={styles.connectionDetailLabel}>Rating:</Text>
+                            <Text style={styles.connectionDetailValue}>
+                              {formatRating(connectedPlayer.skill_rating)}
+                            </Text>
+                          </View>
+                          <View style={styles.connectionDetail}>
+                            <Text style={styles.connectionDetailLabel}>Location:</Text>
+                            <Text style={styles.connectionDetailValue}>
+                              {connectedPlayer.location_display || 'Not specified'}
+                            </Text>
+                          </View>
+                          <View style={styles.connectionDetail}>
+                            <Text style={styles.connectionDetailLabel}>Phone:</Text>
+                            <Text 
+                              style={[styles.connectionDetailValue, styles.phoneNumber]}
+                              onPress={() => handleCall(connectedPlayer.phone_number)}
+                            >
+                              {connectedPlayer.phone_number || 'Not specified'}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                      <Button
+                        title={isRemovingConnection ? "Removing..." : "Remove"} 
+                        onPress={() => handleRemoveConnection(connection.id)}
+                        disabled={isRemovingConnection}
+                        color="#ff4444"
+                      />
+                    </View>
+                  );
+                })
               ) : (
                 <Text style={styles.emptyText}>No connections yet</Text>
               )}
@@ -596,20 +684,41 @@ const styles = StyleSheet.create({
   connectionItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
+    alignItems: 'flex-start',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  connectionText: {
+  connectionInfo: {
     flex: 1,
-    fontSize: 16,
+    marginRight: 16,
+  },
+  connectionName: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
+    marginBottom: 12,
   },
-  connectionDetails: {
+  connectionDetailsContainer: {
+    gap: 8,
+  },
+  connectionDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  connectionDetailLabel: {
     fontSize: 14,
     color: '#666',
-    marginTop: 4,
+    width: 80,
+  },
+  connectionDetailValue: {
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
+  },
+  phoneNumber: {
+    color: '#27c2a0',
+    textDecorationLine: 'underline',
   },
 }); 
